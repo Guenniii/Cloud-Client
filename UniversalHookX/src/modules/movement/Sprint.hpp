@@ -1,81 +1,43 @@
 #ifndef SPRINT_HPP
 #define SPRINT_HPP
 
-#include <iostream>
 #include "../../dependencies/jni/jni.h"
+#include "../../utils/sdk/CMinecraft.h"
+#include <iostream>
 
 class AutoSprint {
 public:
-    static void Run(JNIEnv* env, jobject minecraftInstance) {
-        if (!env || !minecraftInstance)
+    static void Run(JNIEnv* env, CMinecraft* mc) {
+        if (!env || !mc || !mc->IsInitialized( ))
             return;
 
-        auto checkException = [&env](const char* location) -> bool {
-            if (env->ExceptionCheck( )) {
-                std::cout << "[AutoSprint] JNI Exception bei: " << location << std::endl;
-                env->ExceptionDescribe( );
-                env->ExceptionClear( );
-                return true;
-            }
-            return false;
-        };
+        jobject mc_inst = mc->GetInstance( );
+        jobject playerObj = env->GetObjectField(mc_inst, mc->f_player);
+        if (!playerObj)
+            return;
 
-        jclass mcClass = env->GetObjectClass(minecraftInstance);
-        jfieldID playerFieldID = env->GetFieldID(mcClass, "player", "Lnet/minecraft/client/player/LocalPlayer;");
+        jobject inputObj = env->GetObjectField(playerObj, mc->f_input);
+        if (inputObj) {
+            jobject moveVectorObj = env->GetObjectField(inputObj, mc->f_move_vector);
+            if (moveVectorObj) {
 
-        if (!checkException("GetFieldID player")) {
-            jobject playerObj = env->GetObjectField(minecraftInstance, playerFieldID);
-            if (playerObj) {
-                jclass playerClass = env->GetObjectClass(playerObj);
+                // Vorwärts-Impuls aus Vec2 ('y' Field) auslesen
+                jfloat forwardImpulse = env->GetFloatField(moveVectorObj, mc->f_vec2_y);
 
-                // 1. Das 'input' Feld holen (Typ ist jetzt vermutlich ClientInput oder KeyboardInput)
-                jfieldID inputFieldID = env->GetFieldID(playerClass, "input", "Lnet/minecraft/client/player/ClientInput;");
-                if (checkException("GetFieldID input")) {
-                    // Fallback falls der Typ im Mapping anders ist
-                    env->ExceptionClear( );
-                    inputFieldID = env->GetFieldID(playerClass, "input", "Lnet/minecraft/client/player/Input;");
-                }
+                // Sneaking Status abfragen
+                jboolean isSneaking = env->CallBooleanMethod(playerObj, mc->m_is_shifting);
 
-                if (inputFieldID) {
-                    jobject inputObj = env->GetObjectField(playerObj, inputFieldID);
-                    if (inputObj) {
-                        jclass inputClass = env->GetObjectClass(inputObj);
-
-                        // 2. moveVector (Vec2) holen statt forwardImpulse
-                        jfieldID moveVectorFieldID = env->GetFieldID(inputClass, "moveVector", "Lnet/minecraft/world/phys/Vec2;");
-
-                        if (!checkException("GetFieldID moveVector")) {
-                            jobject moveVectorObj = env->GetObjectField(inputObj, moveVectorFieldID);
-                            if (moveVectorObj) {
-                                jclass vec2Class = env->GetObjectClass(moveVectorObj);
-                                // In Vec2 ist 'y' der Vorwärts-Wert
-                                jfieldID yFieldID = env->GetFieldID(vec2Class, "y", "F");
-                                jfloat forwardImpulse = env->GetFloatField(moveVectorObj, yFieldID);
-
-                                // 3. Sneaking prüfen
-                                jmethodID isSneakingMethod = env->GetMethodID(playerClass, "isShiftKeyDown", "()Z");
-                                jboolean isSneaking = env->CallBooleanMethod(playerObj, isSneakingMethod);
-
-                                // 4. Sprint setzen wenn forward > 0
-                                if (forwardImpulse > 0.0f && !isSneaking) {
-                                    jmethodID setSprintingMethod = env->GetMethodID(playerClass, "setSprinting", "(Z)V");
-                                    if (setSprintingMethod) {
-                                        env->CallVoidMethod(playerObj, setSprintingMethod, JNI_TRUE);
-                                    }
-                                }
-                                env->DeleteLocalRef(vec2Class);
-                                env->DeleteLocalRef(moveVectorObj);
-                            }
-                        }
-                        env->DeleteLocalRef(inputClass);
-                        env->DeleteLocalRef(inputObj);
+                // Sprint aktivieren wenn der Spieler sich vorwärts bewegt und nicht sneakt
+                if (forwardImpulse > 0.0f && !isSneaking) {
+                    if (mc->m_set_sprinting) {
+                        env->CallVoidMethod(playerObj, mc->m_set_sprinting, JNI_TRUE);
                     }
                 }
-                env->DeleteLocalRef(playerClass);
-                env->DeleteLocalRef(playerObj);
+                env->DeleteLocalRef(moveVectorObj);
             }
+            env->DeleteLocalRef(inputObj);
         }
-        env->DeleteLocalRef(mcClass);
+        env->DeleteLocalRef(playerObj);
     }
 };
 

@@ -58,9 +58,9 @@ public:
         return true;
     }
 
-    bool SetReach(float value) {
-        if (value < 3.0f) {
-            value = 3.0f;
+    bool SetReach(int value) {
+        if (value < 3) {
+            value = 3;
         }
 
         if (!Init()) {

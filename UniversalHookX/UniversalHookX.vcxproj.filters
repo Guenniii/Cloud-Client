@@ -76,15 +76,12 @@
     <ClInclude Include="src\modules\ModulBase.hpp" />
     <ClInclude Include="src\modules\combat\cw.hpp" />
     <ClInclude Include="src\modules\settings.hpp" />
-    <ClInclude Include="src\dependencies\mapper\JNIMapper.h" />
-    <ClInclude Include="src\dependencies\mapper\JNITypes.h" />
-    <ClInclude Include="src\dependencies\mapper\json.hpp" />
-    <ClInclude Include="src\dependencies\mapper\rsc.h" />
     <ClInclude Include="src\modules\combat\CwCrystal.hpp" />
     <ClInclude Include="src\modules\combat\AutoTotem.hpp" />
     <ClInclude Include="src\modules\combat\Reach.hpp" />
     <ClInclude Include="src\modules\movement\NoJumpDelay.hpp" />
     <ClInclude Include="src\modules\movement\Sprint.hpp" />
+    <ClInclude Include="src\modules\combat\HitCrystal.hpp" />
   </ItemGroup>
   <ItemGroup>
     <Library Include="src\dependencies\jni\jvm.lib" />

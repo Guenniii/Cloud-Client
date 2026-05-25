@@ -3,6 +3,7 @@
 #include "CwCrystal.hpp"
 #include "Reach.hpp"
 #include "AutoTotem.hpp"
+#include "HitCrystal.hpp"
 #include "../movement/NoJumpDelay.hpp"
 #include "../movement/Sprint.hpp"
 #include "../../base.hpp"
@@ -10,6 +11,8 @@
 #include "../settings.hpp"
 #include <Windows.h>
 
+
+static HitCrystal* g_sword_obsidian = nullptr;
 static CwCrystal* g_crystal = nullptr;
 static Reach* g_reach = nullptr;
 static AutoTotem* g_auto_totem = nullptr;
@@ -20,13 +23,19 @@ void CW::Update( ) {
         return;
     }
 
-    if (CW_Enabled)
+
+    if (FastPlace_Enabled)
     {
         p_jni->p_cminecraft->SetRightClickDelay(0);
+    }
 
+    if (CW_Enabled)
+    {
+        
         if (!g_crystal) {
             g_crystal = new CwCrystal(p_jni->GetJVM( ), p_jni->p_cminecraft.get( ));
             g_crystal->Start( );
+            p_jni->p_cminecraft->SetRightClickDelay(0);
         }
     }
 
@@ -52,12 +61,23 @@ void CW::Update( ) {
     if (NoJumpDelay_Enabled) { // Angenommen, du hast eine Checkbox/Variable dafür
         // Wir nutzen die statische Methode aus der .hpp
         // Da du p_cminecraft.get() nutzt, um an die Instanz zu kommen:
-        NoJumpDelay::Run(p_jni->GetEnv( ), p_jni->p_cminecraft->GetInstance( ));
+        NoJumpDelay::Run(p_jni->GetEnv( ), p_jni->p_cminecraft.get( ));
     }
 
     if (AutoSprint_Enabled) {
-        AutoSprint::Run(p_jni->GetEnv( ), p_jni->p_cminecraft->GetInstance( ));
+        AutoSprint::Run(p_jni->GetEnv( ), p_jni->p_cminecraft.get( ));
     }
+
+    if (HitCrystal_Enabled) {
+        if (!g_sword_obsidian) {
+            g_sword_obsidian = new HitCrystal(p_jni->GetJVM( ), p_jni->p_cminecraft.get( ));
+        }
+
+        if (GetAsyncKeyState(VK_RBUTTON) & 0x8000) {
+            g_sword_obsidian->Run( );
+        }
+    }
+    
 
 }
 

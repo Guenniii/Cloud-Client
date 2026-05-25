@@ -413,10 +413,13 @@ namespace Menu {
             //    ImGui::SetCursorPosX(10);
             ImGui::Checkbox("Enable CW", &CW_Enabled);
             ImGui::SliderInt("Delay", &CW_Delay, 0, 4);
+            ImGui::Checkbox("Enable FastPlace", &FastPlace_Enabled);
             ImGui::Checkbox("Enable Reach", &Reach_Enabled);
+            ImGui::SliderInt("Range", &Reach_range, 3, 6);
             ImGui::Checkbox("Enable AutoTotem", &AutoTotem_Enabled);
             ImGui::Checkbox("Enable NoJumpDelay", &NoJumpDelay_Enabled);
             ImGui::Checkbox("Enable AutoSprint", &AutoSprint_Enabled);
+            ImGui::Checkbox("Enable HitCrystal", &HitCrystal_Enabled);
         }
         ImGui::EndChild( );
         

@@ -7,8 +7,7 @@
 #include "../../dependencies/jni/jni.h"
 
 #include "CMinecraft.h"
-#include "../../dependencies/mapper/JNIMapper.h"
-#include "../../dependencies/mapper/rsc.h"
+
 
 
 class JNI final {
