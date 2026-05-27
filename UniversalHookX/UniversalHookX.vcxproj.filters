@@ -29,6 +29,7 @@
     <ClCompile Include="src\utils\imageloader.cpp" />
     <ClCompile Include="src\Base.cpp" />
     <ClCompile Include="src\modules\ModulManager.cpp" />
+    <ClCompile Include="src\utils\SilentAim.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\console\console.hpp" />
@@ -82,6 +83,7 @@
     <ClInclude Include="src\modules\movement\NoJumpDelay.hpp" />
     <ClInclude Include="src\modules\movement\Sprint.hpp" />
     <ClInclude Include="src\modules\combat\HitCrystal.hpp" />
+    <ClInclude Include="src\utils\Silentaim.hpp" />
   </ItemGroup>
   <ItemGroup>
     <Library Include="src\dependencies\jni\jvm.lib" />

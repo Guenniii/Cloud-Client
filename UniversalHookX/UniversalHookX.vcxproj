@@ -200,6 +200,7 @@
     <ClCompile Include="src\modules\ModulManager.cpp" />
     <ClCompile Include="src\utils\imageloader.cpp" />
     <ClCompile Include="src\utils\sdk\java.cpp" />
+    <ClCompile Include="src\utils\SilentAim.cpp" />
     <ClCompile Include="src\utils\utils.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -253,6 +254,7 @@
     <ClInclude Include="src\utils\imageloader.hpp" />
     <ClInclude Include="src\utils\sdk\CMinecraft.h" />
     <ClInclude Include="src\utils\sdk\java.hpp" />
+    <ClInclude Include="src\utils\Silentaim.hpp" />
     <ClInclude Include="src\utils\utils.hpp" />
   </ItemGroup>
   <ItemGroup>

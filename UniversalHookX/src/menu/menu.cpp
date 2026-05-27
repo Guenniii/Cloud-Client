@@ -420,6 +420,7 @@ namespace Menu {
             ImGui::Checkbox("Enable NoJumpDelay", &NoJumpDelay_Enabled);
             ImGui::Checkbox("Enable AutoSprint", &AutoSprint_Enabled);
             ImGui::Checkbox("Enable HitCrystal", &HitCrystal_Enabled);
+            ImGui::Checkbox("Enable SilentAim", &Silent_Aim_Enabled);  
         }
         ImGui::EndChild( );
         

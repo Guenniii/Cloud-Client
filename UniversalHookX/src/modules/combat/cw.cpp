@@ -1,4 +1,5 @@
 #include "../../utils/sdk/CMinecraft.h"
+#include "../../utils/Silentaim.hpp"
 #include "cw.hpp"
 #include "CwCrystal.hpp"
 #include "Reach.hpp"
@@ -77,6 +78,27 @@ void CW::Update( ) {
             g_sword_obsidian->Run( );
         }
     }
+
+    if (Silent_Aim_Enabled) {
+        if (GetAsyncKeyState(VK_RSHIFT) & 0x8000) {
+
+            // 1. Erstelle das Request-Objekt (wie im Java-Beispiel)
+            SilentAimRequest req;
+            req.yaw = 180.0f; // Dein mathematisch errechnetes Ziel (z.B. vom Crystal)
+            req.pitch = 0.0f;
+            req.profile = Profile::COMBAT; // COMBAT, PLACE oder PRECISE
+            req.syncVisualHead = true;     // Zeigt Kopfdrehung für andere Spieler
+
+            // 2. Berechne den sanften Übergang (Spring, Tremor, GCD-Snap)
+            SilentAim::aim(p_jni->GetEnv( ), p_jni->p_cminecraft->GetInstance( ), req);
+
+            // 3. Schicke das offizielle manipulierte Paket ab
+            SilentAim::doSilentRotationJNI(p_jni->GetEnv( ), p_jni->p_cminecraft->GetInstance( ));
+        } else {
+            SilentAim::reset( ); // Resettet die Dämpfung wenn man loslässt
+        }
+    }
+
     
 
 }

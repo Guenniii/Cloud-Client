@@ -16,6 +16,9 @@
 
 #include "../modules/settings.hpp"
 
+#include "../utils/sdk/java.hpp"
+
+
 static HWND g_hWindow = NULL;
 static std::mutex g_mReinitHooksGuard;
 
@@ -139,6 +142,32 @@ namespace Hooks {
             FreeConsole( );
         }
 #endif
+
+        // ==========================================================
+        // JNI / MINECRAFT HOOK REGISTRIERUNG
+        // ==========================================================
+        // Hinweis: Dieser Part setzt voraus, dass p_jni bereitsteht.
+        // Wir suchen die Klasse des LocalPlayer im Client.
+        if (p_jni && p_jni->GetEnv( )) {
+            JNIEnv* env = p_jni->GetEnv( );
+
+            // Klasse im Snapshot finden (Beispielhaftes Standard-Mapping)
+            jclass localPlayerClass = env->FindClass("net/minecraft/client/player/LocalPlayer");
+            if (localPlayerClass) {
+                // In modernen Java-Umgebungen nutzen JNI-Clients oft JNINativeMethod-Swapping.
+                // Falls du MinHook für die internen JVM-Methoden nutzt, sieht das so aus:
+
+                // 1. Hole die Speicheradresse der Methode (benötigt dein SDK-Spezifisches Mapping-System)
+                // LPVOID p_aiStep_Address = p_jni->GetMethodAddress("net/minecraft/client/player/LocalPlayer", "aiStep", "()V");
+
+                // 2. Erstelle den MinHook (falls anwendbar auf die JNI-Kompilierung)
+                // MH_CreateHook(p_aiStep_Address, &hk_aiStep, reinterpret_cast<LPVOID*>(&o_aiStep));
+                // MH_EnableHook(p_aiStep_Address);
+
+                env->DeleteLocalRef(localPlayerClass);
+            }
+        }
+
 
         oWndProc = reinterpret_cast<WNDPROC>(SetWindowLongPtr(g_hWindow, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(WndProc)));
     }

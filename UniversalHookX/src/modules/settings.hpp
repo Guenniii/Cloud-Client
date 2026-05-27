@@ -15,3 +15,5 @@ inline bool NoJumpDelay_Enabled = false;
 inline bool AutoSprint_Enabled = false;
 
 inline bool HitCrystal_Enabled = false;
+
+inline bool Silent_Aim_Enabled = false;
