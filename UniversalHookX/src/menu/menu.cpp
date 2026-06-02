@@ -7,6 +7,8 @@
 #include "../dependencies/imgui/imgui_internal.h"
 #include "../dependencies/imgui/imgui_impl_vulkan.h"
 #include "../utils/imageloader.hpp"
+#include "../dependencies/font/IconsFontAwesome5.h"
+#include "../dependencies/font/fa-solid-900.h"
 //auth
 #include "../auth/Authclient.h"
 #include "../auth/HWID.h"
@@ -38,16 +40,27 @@ static std::string responseText = "";
 static std::string g_licenseDays = "PERMANENT";
 static std::string g_licenseExpiry = "";
 static std::string days = "Days left";
-static bool logged_in = true;
+static bool logged_in = false;
 
 //Fonts
 ImFont* tab_title;
 ImFont* font_icon;
 ImFont* poppins;
+ImFont* icons;
 
 
 static MyTextureData logo;
 static MyTextureData userlogo;
+
+void PulsingText(const char* text) {
+    // Erzeugt einen Wert, der sauber zwischen 0.3 und 1.0 hin und her schwingt
+    float frequency = 3.0f; // Wie schnell wird gepulst
+    float alpha = 0.65f + 0.35f * sinf(ImGui::GetTime( ) * frequency);
+
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, alpha));
+    ImGui::Text(text);
+    ImGui::PopStyleColor( );
+}
 
 void Menu::Images()
 
@@ -156,12 +169,6 @@ namespace Menu {
         style.Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 0.34901962f);
 
         // Load Fonts
-        ImFontConfig font_config;
-        font_config.PixelSnapH = false;
-        font_config.OversampleH = 5;
-        font_config.OversampleV = 5;
-        font_config.RasterizerMultiply = 1.2f;
-
         static const ImWchar ranges[] =
             {
                 0x0020,
@@ -178,12 +185,25 @@ namespace Menu {
             };
 
         // Font
-        font_config.GlyphRanges = ranges;
+        ImFontConfig font_config;
+        font_config.PixelSnapH = false;
+        font_config.OversampleH = 5;
+        font_config.OversampleV = 5;
+        font_config.RasterizerMultiply = 1.2f;
+
+        static const ImWchar icons_ranges[] = {ICON_MIN_FA, ICON_MAX_16_FA, 0};
 
         io.Fonts->AddFontFromMemoryTTF(poppin_font, sizeof(poppin_font), 16, &font_config, ranges);
         tab_title = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\arialbd.ttf", 19.0f, &font_config, ranges);
         font_icon = io.Fonts->AddFontFromMemoryTTF(icon_font, sizeof(icon_font), 25.0f, &font_config, ranges);
         poppins = io.Fonts->AddFontFromMemoryTTF(poppin_font, sizeof(poppin_font), 25.0f, &font_config, ranges);
+        
+
+        ImFontConfig icons_config;
+        icons_config.PixelSnapH = true;
+        icons_config.GlyphMinAdvanceX = 25.0f;
+        icons = io.Fonts->AddFontFromMemoryTTF(new_icons, sizeof(new_icons), 25.0f, &icons_config, icons_ranges);
+
         io.Fonts->Build( );
     }
 
@@ -272,7 +292,6 @@ namespace Menu {
 
     void login_tab( ) {
 
-        
 
         auto draw = ImGui::GetWindowDrawList( );
         ImVec2 pos = ImGui::GetWindowPos( );
@@ -307,8 +326,9 @@ namespace Menu {
         ImGui::InputText("##password", password, sizeof(password), flags | ImGuiInputTextFlags_CharsNoBlank);
         ImGui::PopStyleColor( );
         // Password label
-        draw->AddText(poppins, 18, ImVec2(pos.x + size.x / 2 - 120, pos.y + 190), ImColor(150, 150, 150, int(255 * login_alpha)), "Password");
 
+        draw->AddText(icons, 18, ImVec2(pos.x + size.x / 2 - 120, pos.y + 190), ImColor(150, 150, 150, int(255 * login_alpha)), ICON_FA_USER);
+        PulsingText("Password");
         // Show/Hide password checkbox
         ImGui::SetCursorPos(ImVec2(size.x / 2 - 100, 250));
         ImGui::Checkbox("Show Password", &show_password);
@@ -318,7 +338,9 @@ namespace Menu {
         ImGui::SetNextItemWidth(200);
         if (loginInProgress) {
             ImGui::TextDisabled("Connecting...");
-        } else if (ImGui::Button("Login", ImVec2(200.0f, 40.0f))) {
+            
+        } else if (ImGui::Button( " Login", ImVec2(200.0f, 40.0f))) {
+            
             loginInProgress = true;
             responseText.clear( );
             g_licenseDays.clear( );   // ===== NEU: Alte License-Info löschen
@@ -405,6 +427,9 @@ namespace Menu {
     }
 
     void test_tab( ) {
+        auto draw = ImGui::GetWindowDrawList( );
+        ImVec2 pos = ImGui::GetWindowPos( );
+        ImVec2 size = ImGui::GetWindowSize( );
         ImGui::SetCursorPos(ImVec2(169, 134));
         ImGui::BeginChild("General", ImVec2(320, 240), true);
         {
@@ -420,7 +445,7 @@ namespace Menu {
             ImGui::Checkbox("Enable NoJumpDelay", &NoJumpDelay_Enabled);
             ImGui::Checkbox("Enable AutoSprint", &AutoSprint_Enabled);
             ImGui::Checkbox("Enable HitCrystal", &HitCrystal_Enabled);
-            ImGui::Checkbox("Enable SilentAim", &Silent_Aim_Enabled);  
+            ImGui::Checkbox("Enable SilentAim", &Silent_Aim_Enabled);
         }
         ImGui::EndChild( );
         
@@ -436,7 +461,7 @@ namespace Menu {
         draw->AddText(poppins, 17, ImVec2(pos.x + 13, pos.y + 348), ImColor(105, 105, 105, int(255 * ImGui::GetStyle( ).Alpha)), "Miscellaneous"); // right bg
 
         ImGui::SetCursorPos(ImVec2(13, 99));
-        if (ImGui::Rendertab("r", "Aim Assist", !m_tabs))
+        if (ImGui::Rendertab(ICON_FA_USER, "Aim Assist", !m_tabs))
             m_tabs = 0;
 
         ImGui::SetCursorPos(ImVec2(13, 136));

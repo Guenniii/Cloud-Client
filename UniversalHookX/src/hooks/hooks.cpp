@@ -68,21 +68,12 @@ static LRESULT WINAPI WndProc(const HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
             }
         }
         
-        else if (wParam == VK_HOME) {
-            HANDLE hHandle = CreateThread(NULL, 0, ReinitializeGraphicalHooks, NULL, 0, NULL);
-            if (hHandle != NULL)
-                CloseHandle(hHandle);
-            return 0;
-        } else if (wParam == VK_PRIOR) {
+         else if (wParam == VK_PRIOR) {
             H::bShuttingDown = true;
             U::UnloadDLL( );
             return 0;
         }
-    } else if (uMsg == WM_DESTROY) {
-        HANDLE hHandle = CreateThread(NULL, 0, ReinitializeGraphicalHooks, hWnd, 0, NULL);
-        if (hHandle != NULL)
-            CloseHandle(hHandle);
-    }
+    } 
 
     LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
     if (Menu_Enabled) {

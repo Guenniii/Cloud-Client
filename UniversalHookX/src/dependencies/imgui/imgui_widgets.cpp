@@ -8437,8 +8437,10 @@ void ImGui::TabItemLabelAndCloseButton(ImDrawList* draw_list, const ImRect& bb, 
 }
 
 
+
 extern ImFont* poppins;
 extern ImFont* font_icon;
+extern ImFont* icons;
 bool ImGui::Rendertab(const char* icon, const char* label, bool selected)
 {
     ImGuiWindow* window = ImGui::GetCurrentWindow();
@@ -8495,14 +8497,14 @@ bool ImGui::Rendertab(const char* icon, const char* label, bool selected)
     it_fill->second *= min(GetStyle().Alpha * 1.2, 1.f);
 
     GetWindowDrawList()->AddText(poppins, 19, ImVec2(bb.Min.x + 40, bb.Min.y + 5), ImColor(65, 65, 65, int(255 * GetStyle().Alpha)), label);
-    GetWindowDrawList()->AddText(font_icon, 18, ImVec2(bb.Min.x + 10, bb.Min.y + 5), ImColor(65, 65, 65, int(255 * GetStyle().Alpha)), icon);
+    GetWindowDrawList()->AddText(icons, 18, ImVec2(bb.Min.x + 10, bb.Min.y + 5), ImColor(65, 65, 65, int(255 * GetStyle().Alpha)), icon);
 
     if (selected)
     {
         GetWindowDrawList()->AddRectFilled(ImVec2(bb.Min.x, bb.Min.y), ImVec2(bb.Max.x, bb.Max.y), ImColor(41, 41, 41, int(255 * it_fill->second)), 5);
         GetWindowDrawList()->AddRectFilled(ImVec2(pos.x, pos.y + 5), ImVec2(pos.x + it_fill->second * 2, pos.y + 25), ImColor(174, 139, 148, int(255 * GetStyle().Alpha)), 10.f, ImDrawCornerFlags_Right);
 
-        GetWindowDrawList()->AddText(font_icon, 18, ImVec2(bb.Min.x + 10, bb.Min.y + 5), ImColor(255, 255, 255, int(255 * it_fill->second)), icon);
+        GetWindowDrawList()->AddText(icons, 18, ImVec2(bb.Min.x + 10, bb.Min.y + 5), ImColor(255, 255, 255, int(255 * it_fill->second)), icon);
         GetWindowDrawList()->AddText(poppins, 19, ImVec2(bb.Min.x + 40, bb.Min.y + 5), ImColor(255, 255, 255, int(255 * it_fill->second)), label);
     }
 
@@ -8512,6 +8514,7 @@ bool ImGui::Rendertab(const char* icon, const char* label, bool selected)
 
     return pressed;
 }
+
 
 
 #endif // #ifndef IMGUI_DISABLE

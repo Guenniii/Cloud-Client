@@ -209,6 +209,9 @@
     <ClInclude Include="src\auth\HWID.h" />
     <ClInclude Include="src\backend.hpp" />
     <ClInclude Include="src\console\console.hpp" />
+    <ClInclude Include="src\dependencies\font\fa-solid-900.h" />
+    <ClInclude Include="src\dependencies\font\IconsFontAwesome5.h" />
+    <ClInclude Include="src\dependencies\font\IconsFontAwesome7.h" />
     <ClInclude Include="src\dependencies\images\bytearray.h" />
     <ClInclude Include="src\dependencies\imgui\imconfig.h" />
     <ClInclude Include="src\dependencies\imgui\imgui.h" />
