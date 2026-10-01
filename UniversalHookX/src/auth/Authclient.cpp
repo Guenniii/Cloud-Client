@@ -72,7 +72,7 @@ std::string LoginRequestWithResponse(const std::string& user, const std::string&
     // WinHttp Setup (bleibt gleich wie in deinem Code)
     // Achte darauf, dass der Port hier auf 8083 steht, passend zum Node-Server oben!
     HINTERNET hSession = WinHttpOpen(L"LoginClient", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, NULL, NULL, 0);
-    HINTERNET hConnect = WinHttpConnect(hSession, L"auth.neuromc.xyz", 80, 0);
+    HINTERNET hConnect = WinHttpConnect(hSession, L"auth.cloudclient.vip", 80, 0);
 
     HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"POST", L"/login", NULL, NULL, NULL, 0);
 

@@ -23,12 +23,33 @@ public:
             return;
 
         if (!HasOffhandTotem(env, player)) {
-            if (!m_is_refilling) {
-                m_is_refilling = true;
-                m_last_action = std::chrono::steady_clock::now( );
+
+            // ===== NEU: Cooldown, falls zuvor kein Totem gefunden wurde =====
+            auto now = std::chrono::steady_clock::now( );
+            if (m_no_totem_found) {
+                auto since_check = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_last_no_totem_check).count( );
+                if (since_check < 1000) { // nur alle 1000ms erneut prüfen, statt jeden Tick zu spammen
+                    env->DeleteLocalRef(player);
+                    return;
+                }
             }
 
-            auto now = std::chrono::steady_clock::now( );
+            // ===== NEU: Vorab prüfen, ob überhaupt ein Totem im Inventar existiert =====
+            if (!HasTotemInInventory(env, player)) {
+                std::printf("[-] AutoTotem: Kein Totem im Inventar gefunden, warte...\n");
+                m_no_totem_found = true;
+                m_last_no_totem_check = now;
+                env->DeleteLocalRef(player);
+                return;
+            }
+
+            m_no_totem_found = false; // Totem vorhanden, Cooldown zurücksetzen
+
+            if (!m_is_refilling) {
+                m_is_refilling = true;
+                m_last_action = now;
+            }
+
             if (std::chrono::duration_cast<std::chrono::milliseconds>(now - m_last_action).count( ) > 200) {
                 OpenInventory(env, mc_inst, player);
                 std::printf("[*] AutoTotem: Inventar geöffnet, suche Totem...\n");
@@ -40,6 +61,7 @@ public:
             }
         } else {
             m_is_refilling = false;
+            m_no_totem_found = false;
         }
 
         env->DeleteLocalRef(player);
@@ -139,12 +161,40 @@ private:
         env->DeleteLocalRef(guiObj);
     }
 
+    bool HasTotemInInventory(JNIEnv* env, jobject player) {
+        jobject inv = env->CallObjectMethod(player, p_mc->m_get_inventory);
+        bool found = false;
 
+        for (int i = 0; i < 36; i++) {
+            jobject s = env->CallObjectMethod(inv, p_mc->m_get_item_from_inv, i);
+            if (!s)
+                continue;
+
+            jboolean empty = env->CallBooleanMethod(s, p_mc->m_stack_is_empty);
+            if (!empty) {
+                jobject it = env->CallObjectMethod(s, p_mc->m_stack_get_item);
+                if (it && env->IsSameObject(it, p_mc->o_totem)) {
+                    found = true;
+                }
+                if (it)
+                    env->DeleteLocalRef(it);
+            }
+            env->DeleteLocalRef(s);
+
+            if (found)
+                break;
+        }
+
+        env->DeleteLocalRef(inv);
+        return found;
+    }
 
 
 private:
     JavaVM* p_jvm;
     CMinecraft* p_mc;
     bool m_is_refilling = false;
+    bool m_no_totem_found = false; // NEU
     std::chrono::steady_clock::time_point m_last_action;
+    std::chrono::steady_clock::time_point m_last_no_totem_check; // NEU
 };

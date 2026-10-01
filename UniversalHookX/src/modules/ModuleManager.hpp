@@ -3,7 +3,7 @@
 #include <memory>
 #include <vector>
 
-#include "ModulBase.hpp"
+#include "ModuleBase.hpp"
 
 struct ModuleManager {
     static void Init( );

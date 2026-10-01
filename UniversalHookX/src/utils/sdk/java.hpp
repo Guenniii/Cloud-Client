@@ -7,6 +7,7 @@
 #include "../../dependencies/jni/jni.h"
 
 #include "CMinecraft.h"
+#include "CFabric.h"
 
 
 
@@ -28,14 +29,16 @@ public:
         /* Init game classes */
         {
             p_cminecraft = std::make_unique<CMinecraft>(p_jvm);
-            
+        //    p_cfabric = std::make_unique<CFabric>(p_jvm);
         }
 
         is_init = true;
     }
 
     ~JNI( ) {
-        p_jvm->DetachCurrentThread( );
+        p_cminecraft.reset();
+        p_cfabric.reset();
+        if(p_jvm) p_jvm->DetachCurrentThread( );
 
         is_init = false;
     }
@@ -55,7 +58,7 @@ public:
     
 public:
     std::unique_ptr<CMinecraft> p_cminecraft;
-
+    std::unique_ptr<CFabric> p_cfabric;
 private:
     JavaVM* p_jvm;
     JNIEnv* p_env;

@@ -29,26 +29,26 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
@@ -156,13 +156,14 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>ImTextureID=ImU64;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>ImTextureID=ImU64;NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
       <FavorSizeOrSpeed>Size</FavorSizeOrSpeed>
       <OmitFramePointers>true</OmitFramePointers>
+      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -174,6 +175,39 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\auth\Authclient.cpp" />
+    <ClCompile Include="src\modules\RuntimeModule.cpp" />
+    <ClCompile Include="src\modules\utility\fast_place.cpp" />
+    <ClCompile Include="src\modules\combat\reach_module.cpp" />
+    <ClCompile Include="src\modules\combat\auto_totem_module.cpp" />
+    <ClCompile Include="src\modules\movement\no_jump_delay_module.cpp" />
+    <ClCompile Include="src\modules\movement\auto_sprint_module.cpp" />
+    <ClCompile Include="src\modules\movement\safe_walk_module.cpp" />
+    <ClCompile Include="src\modules\movement\short_wind_charge_module.cpp" />
+    <ClCompile Include="src\modules\movement\auto_pearl_catch_module.cpp" />
+    <ClCompile Include="src\modules\combat\hit_crystal_module.cpp" />
+    <ClCompile Include="src\modules\combat\auto_mace_module.cpp" />
+    <ClCompile Include="src\modules\combat\breach_swap_module.cpp" />
+    <ClCompile Include="src\modules\combat\aim_assist_module.cpp" />
+    <ClCompile Include="src\modules\utility\fake_lag_module.cpp" />
+    <ClCompile Include="src\modules\utility\auto_tool_module.cpp" />
+    <ClCompile Include="src\modules\utility\assist_modules.cpp" />
+    <ClCompile Include="src\modules\combat\safe_anchor_module.cpp" />
+    <ClCompile Include="src\modules\combat\silent_aim_module.cpp" />
+    <ClCompile Include="src\modules\utility\seedcracker_module.cpp" />
+    <ClCompile Include="src\utils\sdk\CMinecraft.cpp" />
+    <ClCompile Include="src\utils\sdk\CFabric.cpp" />
+    <ClCompile Include="src\modules\combat\Reach.cpp" />
+    <ClCompile Include="src\modules\combat\HitCrystal.cpp" />
+    <ClCompile Include="src\modules\combat\CwCrystal.cpp" />
+    <ClCompile Include="src\menu\login.cpp" />
+    <ClCompile Include="src\input\key_mapping.cpp" />
+    <ClCompile Include="src\menu\resources.cpp" />
+    <ClCompile Include="src\menu\module_registry.cpp" />
+    <ClCompile Include="src\menu\widgets.cpp" />
+    <ClCompile Include="src\menu\key_names.cpp" />
+    <ClCompile Include="src\menu\pages\config_page.cpp" />
+    <ClCompile Include="src\menu\pages\settings_page.cpp" />
+    <ClCompile Include="src\menu\pages\seedcracker_page.cpp" />
     <ClCompile Include="src\auth\Hash.cpp" />
     <ClCompile Include="src\auth\HWID.cpp" />
     <ClCompile Include="src\Base.cpp" />
@@ -197,14 +231,27 @@
     <ClCompile Include="src\hooks\hooks.cpp" />
     <ClCompile Include="src\menu\menu.cpp" />
     <ClCompile Include="src\modules\combat\cw.cpp" />
-    <ClCompile Include="src\modules\ModulManager.cpp" />
+    <ClCompile Include="src\modules\ModuleManager.cpp" />
+    <ClCompile Include="src\utils\config\config.cpp" />
     <ClCompile Include="src\utils\imageloader.cpp" />
     <ClCompile Include="src\utils\sdk\java.cpp" />
+    <ClCompile Include="src\utils\seedcracker\seedcracker_bridge.cpp" />
     <ClCompile Include="src\utils\SilentAim.cpp" />
     <ClCompile Include="src\utils\utils.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\auth\Authclient.h" />
+    <ClInclude Include="src\utils\sdk\jni_refs.hpp" />
+    <ClInclude Include="src\modules\RuntimeModule.hpp" />
+    <ClInclude Include="src\modules\runtime_modules.hpp" />
+    <ClInclude Include="src\menu\login.hpp" />
+    <ClInclude Include="src\input\key_mapping.hpp" />
+    <ClInclude Include="src\menu\resources.hpp" />
+    <ClInclude Include="src\menu\module_registry.hpp" />
+    <ClInclude Include="src\menu\palette.hpp" />
+    <ClInclude Include="src\menu\widgets.hpp" />
+    <ClInclude Include="src\menu\key_names.hpp" />
+    <ClInclude Include="src\menu\pages.hpp" />
     <ClInclude Include="src\auth\Hash.h" />
     <ClInclude Include="src\auth\HWID.h" />
     <ClInclude Include="src\backend.hpp" />
@@ -212,6 +259,7 @@
     <ClInclude Include="src\dependencies\font\fa-solid-900.h" />
     <ClInclude Include="src\dependencies\font\IconsFontAwesome5.h" />
     <ClInclude Include="src\dependencies\font\IconsFontAwesome7.h" />
+    <ClInclude Include="src\dependencies\gifs\gif.h" />
     <ClInclude Include="src\dependencies\images\bytearray.h" />
     <ClInclude Include="src\dependencies\imgui\imconfig.h" />
     <ClInclude Include="src\dependencies\imgui\imgui.h" />
@@ -248,16 +296,37 @@
     <ClInclude Include="src\modules\combat\CwCrystal.hpp" />
     <ClInclude Include="src\modules\combat\HitCrystal.hpp" />
     <ClInclude Include="src\modules\combat\Reach.hpp" />
-    <ClInclude Include="src\modules\ModulBase.hpp" />
+    <ClInclude Include="src\modules\ModuleBase.hpp" />
     <ClInclude Include="src\modules\ModuleManager.hpp" />
     <ClInclude Include="src\base.hpp" />
     <ClInclude Include="src\modules\movement\NoJumpDelay.hpp" />
     <ClInclude Include="src\modules\movement\Sprint.hpp" />
     <ClInclude Include="src\modules\settings.hpp" />
+    <ClInclude Include="src\utils\config\config.hpp" />
     <ClInclude Include="src\utils\imageloader.hpp" />
+    <ClInclude Include="src\utils\sdk\CFabric.h" />
     <ClInclude Include="src\utils\sdk\CMinecraft.h" />
     <ClInclude Include="src\utils\sdk\java.hpp" />
-    <ClInclude Include="src\utils\Silentaim.hpp" />
+    <ClInclude Include="src\utils\seedcracker\seedcracker_bridge.hpp" />
+    <ClInclude Include="src\utils\SilentAim.hpp" />
+    <ClInclude Include="src\input\rotation\manual_attack.hpp" />
+    <ClInclude Include="src\input\rotation\antibot.hpp" />
+    <ClInclude Include="src\input\combat\auto_mace.hpp" />
+    <ClInclude Include="src\input\combat\breach_swap.hpp" />
+    <ClInclude Include="src\input\combat\aim_assist.hpp" />
+    <ClInclude Include="src\input\fake_lag.hpp" />
+    <ClInclude Include="src\input\auto_tool.hpp" />
+    <ClInclude Include="src\input\utility_suite.hpp" />
+    <ClInclude Include="src\input\assist_options.hpp" />
+    <ClInclude Include="src\utils\esp\glow.hpp" />
+    <ClInclude Include="src\input\combat\safe_anchor.hpp" />
+    <ClInclude Include="src\input\action_key.hpp" />
+    <ClInclude Include="src\input\rotation\types.hpp" />
+    <ClInclude Include="src\input\rotation\player_selection.hpp" />
+    <ClInclude Include="src\input\rotation\player_targeting.hpp" />
+    <ClInclude Include="src\input\rotation\controller.hpp" />
+    <ClInclude Include="src\input\rotation\targeting.hpp" />
+    <ClInclude Include="src\input\rotation\ownership.hpp" />
     <ClInclude Include="src\utils\utils.hpp" />
   </ItemGroup>
   <ItemGroup>

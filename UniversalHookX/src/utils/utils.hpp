@@ -16,7 +16,7 @@ namespace Utils {
 	void SetRenderingBackend(RenderingBackend_t eRenderingBackend);
 	RenderingBackend_t GetRenderingBackend( );
 	const char* RenderingBackendToStr( );
-
+    RenderingBackend_t DetectRenderingBackend( );
 	HWND GetProcessWindow( );
 	void UnloadDLL( );
 	

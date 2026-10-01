@@ -1,7 +1,34 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ClCompile Include="src\dllmain.cpp" />
+    <ClCompile Include="src\modules\combat\aim_assist_module.cpp" />
+    <ClCompile Include="src\modules\utility\fake_lag_module.cpp" />
+    <ClCompile Include="src\modules\utility\auto_tool_module.cpp" />
+    <ClCompile Include="src\modules\utility\assist_modules.cpp" />
+    <ClCompile Include="src\modules\RuntimeModule.cpp" />
+    <ClCompile Include="src\modules\utility\fast_place.cpp" />
+    <ClCompile Include="src\modules\combat\reach_module.cpp" />
+    <ClCompile Include="src\modules\combat\auto_totem_module.cpp" />
+    <ClCompile Include="src\modules\movement\no_jump_delay_module.cpp" />
+    <ClCompile Include="src\modules\movement\auto_sprint_module.cpp" />
+    <ClCompile Include="src\modules\combat\hit_crystal_module.cpp" />
+    <ClCompile Include="src\modules\combat\silent_aim_module.cpp" />
+    <ClCompile Include="src\modules\utility\seedcracker_module.cpp" />
+    <ClCompile Include="src\utils\sdk\CMinecraft.cpp" />
+    <ClCompile Include="src\utils\sdk\CFabric.cpp" />
+    <ClCompile Include="src\modules\combat\Reach.cpp" />
+    <ClCompile Include="src\modules\combat\HitCrystal.cpp" />
+    <ClCompile Include="src\modules\combat\CwCrystal.cpp" />
+    <ClCompile Include="src\menu\login.cpp" />
+    <ClCompile Include="src\input\key_mapping.cpp" />
+    <ClCompile Include="src\menu\resources.cpp" />
+    <ClCompile Include="src\menu\module_registry.cpp" />
+    <ClCompile Include="src\menu\widgets.cpp" />
+    <ClCompile Include="src\menu\key_names.cpp" />
+    <ClCompile Include="src\menu\pages\config_page.cpp" />
+    <ClCompile Include="src\menu\pages\settings_page.cpp" />
+    <ClCompile Include="src\menu\pages\seedcracker_page.cpp" />
     <ClCompile Include="src\console\console.cpp" />
     <ClCompile Include="src\utils\utils.cpp" />
     <ClCompile Include="src\hooks\hooks.cpp" />
@@ -28,11 +55,30 @@
     <ClCompile Include="src\utils\sdk\java.cpp" />
     <ClCompile Include="src\utils\imageloader.cpp" />
     <ClCompile Include="src\Base.cpp" />
-    <ClCompile Include="src\modules\ModulManager.cpp" />
+    <ClCompile Include="src\modules\ModuleManager.cpp" />
     <ClCompile Include="src\utils\SilentAim.cpp" />
+    <ClCompile Include="src\utils\config\config.cpp" />
+    <ClCompile Include="src\utils\seedcracker\seedcracker_bridge.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\console\console.hpp" />
+    <ClInclude Include="src\utils\sdk\jni_refs.hpp" />
+    <ClInclude Include="src\modules\RuntimeModule.hpp" />
+    <ClInclude Include="src\modules\runtime_modules.hpp" />
+    <ClInclude Include="src\input\combat\aim_assist.hpp" />
+    <ClInclude Include="src\input\fake_lag.hpp" />
+    <ClInclude Include="src\input\auto_tool.hpp" />
+    <ClInclude Include="src\input\utility_suite.hpp" />
+    <ClInclude Include="src\input\assist_options.hpp" />
+    <ClInclude Include="src\utils\esp\glow.hpp" />
+    <ClInclude Include="src\menu\login.hpp" />
+    <ClInclude Include="src\input\key_mapping.hpp" />
+    <ClInclude Include="src\menu\resources.hpp" />
+    <ClInclude Include="src\menu\module_registry.hpp" />
+    <ClInclude Include="src\menu\palette.hpp" />
+    <ClInclude Include="src\menu\widgets.hpp" />
+    <ClInclude Include="src\menu\key_names.hpp" />
+    <ClInclude Include="src\menu\pages.hpp" />
     <ClInclude Include="src\hooks\hooks.hpp" />
     <ClInclude Include="src\utils\utils.hpp" />
     <ClInclude Include="src\dependencies\imgui\imconfig.h" />
@@ -74,7 +120,7 @@
     <ClInclude Include="src\utils\sdk\CMinecraft.h" />
     <ClInclude Include="src\modules\ModuleManager.hpp" />
     <ClInclude Include="src\base.hpp" />
-    <ClInclude Include="src\modules\ModulBase.hpp" />
+    <ClInclude Include="src\modules\ModuleBase.hpp" />
     <ClInclude Include="src\modules\combat\cw.hpp" />
     <ClInclude Include="src\modules\settings.hpp" />
     <ClInclude Include="src\modules\combat\CwCrystal.hpp" />
@@ -83,10 +129,14 @@
     <ClInclude Include="src\modules\movement\NoJumpDelay.hpp" />
     <ClInclude Include="src\modules\movement\Sprint.hpp" />
     <ClInclude Include="src\modules\combat\HitCrystal.hpp" />
-    <ClInclude Include="src\utils\Silentaim.hpp" />
+    <ClInclude Include="src\utils\SilentAim.hpp" />
     <ClInclude Include="src\dependencies\font\IconsFontAwesome7.h" />
     <ClInclude Include="src\dependencies\font\IconsFontAwesome5.h" />
     <ClInclude Include="src\dependencies\font\fa-solid-900.h" />
+    <ClInclude Include="src\dependencies\gifs\gif.h" />
+    <ClInclude Include="src\utils\sdk\CFabric.h" />
+    <ClInclude Include="src\utils\config\config.hpp" />
+    <ClInclude Include="src\utils\seedcracker\seedcracker_bridge.hpp" />
   </ItemGroup>
   <ItemGroup>
     <Library Include="src\dependencies\jni\jvm.lib" />

@@ -1,213 +1,148 @@
+#include "../utils/lifecycle/lifecycle.hpp"
+#include "../utils/theme/theme.hpp"
 #include "menu.hpp"
-#include <thread>
+#include "../input/utility_suite.hpp"
+#include "status_hud.hpp"
+#include "performance.hpp"
+#include "login.hpp"
+#include "../input/key_mapping.hpp"
+#include "resources.hpp"
+#include "module_registry.hpp"
+#include "widgets.hpp"
+#include "palette.hpp"
+#include "pages.hpp"
+#include "key_names.hpp"
+#include "../base.hpp"
 #include "../console/console.hpp"
+#include "../utils/config/config.hpp"
+#include <cmath>
+#include <string>
+#include <thread>
+#include <unordered_map>
+#include <vector>
+#include <windows.h>
 // ImGui
+#include "../dependencies/font/IconsFontAwesome5.h"
 #include "../dependencies/imgui/imgui.h"
 #include "../dependencies/imgui/imgui_impl_win32.h"
 #include "../dependencies/imgui/imgui_internal.h"
-#include "../dependencies/imgui/imgui_impl_vulkan.h"
-#include "../utils/imageloader.hpp"
-#include "../dependencies/font/IconsFontAwesome5.h"
-#include "../dependencies/font/fa-solid-900.h"
-//auth
-#include "../auth/Authclient.h"
-#include "../auth/HWID.h"
-#include "../auth/Hash.h"
+// SeedCracker
+#include "../utils/seedcracker/seedcracker_bridge.hpp"
+#include "../utils/oresim/oresim.hpp"
+#include "../utils/esp/player_esp.hpp"
 
-//Byte Arrays
-#include "../dependencies/images/bytearray.h"
 #include "../modules/settings.hpp"
 
-
 #pragma warning(disable : 4244)
+#pragma warning(disable : 4005)
 
 namespace ig = ImGui;
+using namespace Menu::Widgets;
+using Menu::GetKeyName;
 
 // ===== UI STATE VARIABLES =====
-static int m_tabs = 0;
 static bool toggled = true;
 static float open_alpha = 0.0f;
 
-// Login variables
-char username[64];
-char password[64];
-std::string msg = "";
-static bool show_password = false;
-static float login_alpha = 0.0f;
-static std::string last_logged_user = "";
-static bool loginInProgress = false;
-static std::string responseText = "";
-static std::string g_licenseDays = "PERMANENT";
-static std::string g_licenseExpiry = "";
-static std::string days = "Days left";
-static bool logged_in = false;
+// SettingType / ModuleSetting / ModuleData sind jetzt in config.hpp definiert,
+// damit config.cpp sie ebenfalls verwenden kann.
 
-//Fonts
-ImFont* tab_title;
-ImFont* font_icon;
-ImFont* poppins;
-ImFont* icons;
+struct CategoryTab {
+    const char* icon;
+    const char* label;
+};
 
+// Persistente Expand-States (auÃƒÅ¸erhalb der Funktion, damit sie ÃƒÂ¼ber Frames erhalten bleiben)
+static std::unordered_map<int, bool> card_expanded;
+static std::unordered_map<int, float> card_expand_anim;
 
-static MyTextureData logo;
-static MyTextureData userlogo;
+// --- Icon Placeholders ---
+// Replace these with your actual icon font definitions (e.g., FontAwesome)
+#define ICON_FA_BOLT "~"
+#define ICON_FA_PUZZLE "P"
+#define ICON_FA_SAVE "D"
+#define ICON_FA_SLIDERS "O"
+#define ICON_FA_CHEVRON_D "v"
+#define ICON_FA_USER "U"
+#define ICON_FA_CLOCK "C"
+#define ICON_FA_STAR "*"
 
-void PulsingText(const char* text) {
-    // Erzeugt einen Wert, der sauber zwischen 0.3 und 1.0 hin und her schwingt
-    float frequency = 3.0f; // Wie schnell wird gepulst
-    float alpha = 0.65f + 0.35f * sinf(ImGui::GetTime( ) * frequency);
+// Seed entry uses the same palette and animated button as the other settings.
+static constexpr float ORESIM_SEED_ROW_HEIGHT = 108.0f;
+static void DrawOreSimSeedInput(ImDrawList* draw_list, ImVec2 pos, float width, float alpha) {
+    draw_list->AddText(pos, ColA(Menu::Palette::Label(), alpha), "World Seed");
+    const char* badge = "MANUAL";
+    ImVec2 badge_text = ImGui::CalcTextSize(badge);
+    ImVec2 badge_min(pos.x + width - badge_text.x - 16.0f, pos.y - 2.0f);
+    draw_list->AddRectFilled(badge_min, ImVec2(pos.x + width, pos.y + badge_text.y + 2.0f), ColA(Menu::Palette::Soft(), alpha), 5.0f);
+    draw_list->AddText(ImVec2(badge_min.x + 8.0f, pos.y), ColA(Menu::Palette::Accent(), alpha), badge);
 
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, alpha));
-    ImGui::Text(text);
-    ImGui::PopStyleColor( );
-}
-
-void Menu::Images()
-
-{
-    static bool g_TextureInitialized = false;
-    if (!g_TextureInitialized) {
-        LoadTextureFromMemory(logo_two, sizeof(logo_two), &logo);
-        LoadTextureFromMemory(user, sizeof(user), &userlogo);
-        g_TextureInitialized = true;
-        LOG("[+] Vulkan: Texture loaded.\n");
+    const float field_y = pos.y + 26.0f;
+    const float button_w = ImGui::CalcTextSize("set").x + 28.0f;
+    const float field_w = (std::max)(80.0f, width - button_w - 10.0f);
+    ImGui::SetCursorScreenPos(ImVec2(pos.x, field_y));
+    ImGui::SetNextItemWidth(field_w);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12.0f, 9.0f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, ColV(Menu::Palette::Background(), 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ColV(Menu::Palette::Soft(), 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ColV(Menu::Palette::Background(), 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text, ColV(Menu::Palette::Text(), 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_TextDisabled, ColV(Menu::Palette::Muted(), 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_TextSelectedBg, ColV(Menu::Palette::Soft(), 1.0f));
+    bool submit = ImGui::InputTextWithHint("##oresim_seed", "Enter Seed ...", OreSim::seedInput,
+                                         sizeof(OreSim::seedInput), ImGuiInputTextFlags_EnterReturnsTrue);
+    if (ImGui::IsItemEdited()) {
+        OreSim::hasManualSeed = false;
+        OreSim::seedError.clear();
     }
+    const bool focused = ImGui::IsItemActive();
+    ImVec2 field_min = ImGui::GetItemRectMin(), field_max = ImGui::GetItemRectMax();
+    ImGui::PopStyleColor(6);
+    ImGui::PopStyleVar(3);
+
+    ImGui::SetCursorScreenPos(ImVec2(pos.x + field_w + 10.0f, field_y));
+    submit |= DrawRoundedButton(draw_list, "##oresim_apply_seed", "set",
+                                ImVec2(button_w, field_max.y - field_min.y), Menu::Palette::Accent(),
+                                Theme::Current().hover, Theme::Current().onAccent, alpha, 8.0f, true);
+    if (submit) {
+        OreSim::hasManualSeed = OreSim::ParseSeed(OreSim::seedInput, OreSim::manualSeed);
+        OreSim::seedError = OreSim::hasManualSeed ? "" : "Please enter a valid numeric seed.";
+    }
+    const bool error = !OreSim::seedError.empty();
+    const ImU32 error_color = IM_COL32(215, 85, 105, 255);
+    draw_list->AddRect(field_min, field_max,
+        ColA(error ? error_color : focused ? Menu::Palette::Accent() : Menu::Palette::Border(), alpha), 8.0f, 0, focused ? 1.5f : 1.0f);
+    const ImU32 state_color = error ? error_color : OreSim::hasManualSeed ? Menu::Palette::Success() : Menu::Palette::Muted();
+    const char* message = error ? OreSim::seedError.c_str() : OreSim::hasManualSeed
+        ? "Seed applied" : "Press Enter or click Apply to confirm";
+    const float status_y = field_max.y + 10.0f;
+    draw_list->AddCircleFilled(ImVec2(pos.x + 3.0f, status_y + ImGui::GetFontSize() * 0.5f), 3.0f, ColA(state_color, alpha));
+    draw_list->AddText(ImVec2(pos.x + 14.0f, status_y), ColA(state_color, alpha), message);
+    draw_list->AddLine(ImVec2(pos.x, pos.y + 98.0f), ImVec2(pos.x + width, pos.y + 98.0f), ColA(Menu::Palette::Border(), alpha));
 }
 
+// ZeilenhÃƒÂ¶he je nach Setting-Typ (fÃƒÂ¼r die Expand-Animation)
+static float SettingRowHeight(const ModuleSetting& s) {
+    return s.type == SettingType::SliderInt ? 52.0f : 32.0f;
+}
+
+// Index des Moduls, das gerade auf einen Tastendruck wartet (-1 = keine Aufnahme aktiv)
+static auto& capturing_module = Config::capturing_module_key;
+
+// "Seiten" im Hauptfenster: 0-2 sind die Kategorie-Tabs, 3/4 sind Config/Settings.
+// Alles laeuft ueber denselben Crossfade-Mechanismus wie ein normaler Kategorie-Switch.
+constexpr int PAGE_COMBAT = 0;
+constexpr int PAGE_MOVEMENT = 1;
+constexpr int PAGE_UTILITY = 2;
+constexpr int PAGE_CONFIG = 3;
+constexpr int PAGE_SETTINGS = 4;
+constexpr int PAGE_SEEDCRACKER = 5;
 
 namespace Menu {
 
-    void SetupImGuiStyle( ) {
-        // Eggplant style by yo-ru from ImThemes
-        ImGuiStyle& style = ImGui::GetStyle( );
-        ImGuiIO& io = ImGui::GetIO( );
-        (void)io;
-
-        style.Alpha = 1.0f;
-        style.DisabledAlpha = 0.6f;
-        style.WindowPadding = ImVec2(10.0f, 10.0f);
-        style.WindowRounding = 10.0f;
-        style.WindowBorderSize = 0;
-        style.WindowMinSize = ImVec2(20.0f, 32.0f);
-        style.WindowTitleAlign = ImVec2(0.5f, 0.5f);
-        style.WindowMenuButtonPosition = ImGuiDir_None;
-        style.ChildRounding = 10.0f;
-        style.ChildBorderSize = 1.0f;
-        style.PopupRounding = 10.0f;
-        style.PopupBorderSize = 1.0f;
-        style.FramePadding = ImVec2(1, 0);
-        style.FrameRounding = 3;
-        style.FrameBorderSize = 0.0f;
-        style.ItemSpacing = ImVec2(4.0f, 6.0f);
-        style.ItemInnerSpacing = ImVec2(10.0f, 4.0f);
-        style.CellPadding = ImVec2(4.0f, 4.0f);
-        style.IndentSpacing = 20.0f;
-        style.ColumnsMinSpacing = 4.0f;
-        style.ScrollbarSize = 5;
-        style.ScrollbarRounding = 3;
-        style.GrabMinSize = 10.0f;
-        style.GrabRounding = 10.0f;
-        style.TabRounding = 6.0f;
-        style.TabBorderSize = 0.0f;
-        //    style.TabMinWidthForCloseButton = 0.0f;
-        style.ColorButtonPosition = ImGuiDir_Right;
-        style.ButtonTextAlign = ImVec2(0.5f, 0.5f);
-        style.SelectableTextAlign = ImVec2(0.0f, 0.0f);
-
-        style.Colors[ImGuiCol_Text] = ImVec4(0.9490196f, 0.9490196f, 0.9490196f, 1.0f);
-        style.Colors[ImGuiCol_TextDisabled] = ImVec4(0.9490196f, 0.9490196f, 0.9490196f, 0.34509805f);
-        style.Colors[ImGuiCol_WindowBg] = ImVec4(0.47843137f, 0.34901962f, 0.45882353f, 1.0f);
-        style.Colors[ImGuiCol_ChildBg] = ImVec4(0.47843137f, 0.34901962f, 0.45882353f, 1.0f);
-        style.Colors[ImGuiCol_PopupBg] = ImVec4(0.47843137f, 0.34901962f, 0.45882353f, 1.0f);
-        style.Colors[ImGuiCol_Border] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
-        style.Colors[ImGuiCol_BorderShadow] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
-        style.Colors[ImGuiCol_FrameBg] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 1.0f);
-        style.Colors[ImGuiCol_FrameBgHovered] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 1.0f);
-        style.Colors[ImGuiCol_FrameBgActive] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 0.8197425f);
-        style.Colors[ImGuiCol_TitleBg] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 1.0f);
-        style.Colors[ImGuiCol_TitleBgActive] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 1.0f);
-        style.Colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 1.0f);
-        style.Colors[ImGuiCol_MenuBarBg] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 1.0f);
-        style.Colors[ImGuiCol_ScrollbarBg] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 1.0f);
-        style.Colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.6039216f, 0.41960785f, 0.5764706f, 0.3019608f);
-        style.Colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.6039216f, 0.41960785f, 0.5764706f, 0.4f);
-        style.Colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.6039216f, 0.41960785f, 0.5764706f, 0.6f);
-        style.Colors[ImGuiCol_CheckMark] = ImVec4(0.6039216f, 0.41960785f, 0.5764706f, 1.0f);
-        style.Colors[ImGuiCol_SliderGrab] = ImVec4(0.6039216f, 0.41960785f, 0.5764706f, 0.3019608f);
-        style.Colors[ImGuiCol_SliderGrabActive] = ImVec4(0.6039216f, 0.41960785f, 0.5764706f, 0.6f);
-        style.Colors[ImGuiCol_Button] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 1.0f);
-        style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 0.4f);
-        style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 0.6f);
-        style.Colors[ImGuiCol_Header] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 1.0f);
-        style.Colors[ImGuiCol_HeaderHovered] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 1.0f);
-        style.Colors[ImGuiCol_HeaderActive] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 1.0f);
-        style.Colors[ImGuiCol_Separator] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 1.0f);
-        style.Colors[ImGuiCol_SeparatorHovered] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 1.0f);
-        style.Colors[ImGuiCol_SeparatorActive] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 1.0f);
-        style.Colors[ImGuiCol_ResizeGrip] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 0.4549356f);
-        style.Colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 0.7811159f);
-        style.Colors[ImGuiCol_ResizeGripActive] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 0.9019608f);
-        style.Colors[ImGuiCol_Tab] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 1.0f);
-        style.Colors[ImGuiCol_TabHovered] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 0.8f);
-        style.Colors[ImGuiCol_TabActive] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 0.84313726f);
-        style.Colors[ImGuiCol_TabUnfocused] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 0.81960785f);
-        style.Colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 0.8352941f);
-        style.Colors[ImGuiCol_PlotLines] = ImVec4(0.9490196f, 0.9490196f, 0.9490196f, 1.0f);
-        style.Colors[ImGuiCol_PlotLinesHovered] = ImVec4(0.47843137f, 0.34901962f, 0.45882353f, 1.0f);
-        style.Colors[ImGuiCol_PlotHistogram] = ImVec4(0.60784316f, 0.42745098f, 0.5803922f, 1.0f);
-        style.Colors[ImGuiCol_PlotHistogramHovered] = ImVec4(0.60784316f, 0.42745098f, 0.5803922f, 0.639485f);
-        style.Colors[ImGuiCol_TableHeaderBg] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 1.0f);
-        style.Colors[ImGuiCol_TableBorderStrong] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 1.0f);
-        style.Colors[ImGuiCol_TableBorderLight] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 1.0f);
-        style.Colors[ImGuiCol_TableRowBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
-        style.Colors[ImGuiCol_TableRowBgAlt] = ImVec4(1.0f, 1.0f, 1.0f, 0.01716739f);
-        style.Colors[ImGuiCol_TextSelectedBg] = ImVec4(0.6039216f, 0.41960785f, 0.5764706f, 0.6f);
-        style.Colors[ImGuiCol_DragDropTarget] = ImVec4(0.60784316f, 0.42745098f, 0.5803922f, 1.0f);
-        style.Colors[ImGuiCol_NavHighlight] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 0.8f);
-        style.Colors[ImGuiCol_NavWindowingHighlight] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 0.7019608f);
-        style.Colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 0.2f);
-        style.Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.16078432f, 0.10980392f, 0.1764706f, 0.34901962f);
-
-        // Load Fonts
-        static const ImWchar ranges[] =
-            {
-                0x0020,
-                0x00FF, // Basic Latin + Latin Supplement
-                0x0400,
-                0x052F, // Cyrillic + Cyrillic Supplement
-                0x2DE0,
-                0x2DFF, // Cyrillic Extended-A
-                0xA640,
-                0xA69F, // Cyrillic Extended-B
-                0xE000,
-                0xE226, // icons
-                0,
-            };
-
-        // Font
-        ImFontConfig font_config;
-        font_config.PixelSnapH = false;
-        font_config.OversampleH = 5;
-        font_config.OversampleV = 5;
-        font_config.RasterizerMultiply = 1.2f;
-
-        static const ImWchar icons_ranges[] = {ICON_MIN_FA, ICON_MAX_16_FA, 0};
-
-        io.Fonts->AddFontFromMemoryTTF(poppin_font, sizeof(poppin_font), 16, &font_config, ranges);
-        tab_title = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\arialbd.ttf", 19.0f, &font_config, ranges);
-        font_icon = io.Fonts->AddFontFromMemoryTTF(icon_font, sizeof(icon_font), 25.0f, &font_config, ranges);
-        poppins = io.Fonts->AddFontFromMemoryTTF(poppin_font, sizeof(poppin_font), 25.0f, &font_config, ranges);
-        
-
-        ImFontConfig icons_config;
-        icons_config.PixelSnapH = true;
-        icons_config.GlyphMinAdvanceX = 25.0f;
-        icons = io.Fonts->AddFontFromMemoryTTF(new_icons, sizeof(new_icons), 25.0f, &icons_config, icons_ranges);
-
-        io.Fonts->Build( );
-    }
-
-        void InitializeContext(HWND hwnd) {
+    void InitializeContext(HWND hwnd) {
         if (ig::GetCurrentContext( ))
             return;
 
@@ -217,11 +152,8 @@ namespace Menu {
         ImGuiIO& io = ImGui::GetIO( );
         io.IniFilename = io.LogFilename = nullptr;
 
-         SetupImGuiStyle( );  // Fonts & Style einmalig laden
-        
-
+        Resources::SetupStyleAndFonts();
     }
-
 
     void Particles( ) {
 
@@ -254,311 +186,510 @@ namespace Menu {
         }
     }
 
-    void Decoration( ) {
-        auto draw = ImGui::GetWindowDrawList( );
-        ImVec2 pos = ImGui::GetWindowPos( );
+    void DrawPhantomMenu( ) {
+        auto modules = Registry::GetModules();
+        //       auf Namespace-Ebene definiert, siehe oben) =====
+        static CategoryTab categories[3] = {
+            {ICON_FA_CROSSHAIRS, "Combat"},
+            {ICON_FA_WIND, "Movement"},
+            {ICON_FA_HAMMER, "Utility"},
+        };
 
-        draw->AddRectFilled(ImVec2(pos.x, pos.y), ImVec2(pos.x + 161, pos.y + 535), ImColor(32, 32, 32, int(255 * ImGui::GetStyle( ).Alpha)), 10.f, ImDrawCornerFlags_Left); // left bg
-        draw->AddRect(ImVec2(pos.x, pos.y), ImVec2(pos.x + 161, pos.y + 535), ImColor(50, 50, 50, int(255 * ImGui::GetStyle( ).Alpha)), 10.f, ImDrawCornerFlags_Left, 1);    // left bg
+        static int active_page = PAGE_COMBAT;   // 0-2 = Kategorie-Tabs, 3 = Config, 4 = Settings
+        static int last_category = PAGE_COMBAT; // merkt sich den zuletzt gewaehlten Tab (fuer die Pill-Position)
+        static int trans_from = -1, trans_to = -1;
+        static float trans_t = -1.0f; // -1 = keine Transition
+        const float main_w = 700.0f;
+        const float main_h = 520.0f;
+        // Window settings to mimic the borderless rounded design
+        ImGui::SetNextWindowSize(ImVec2(700, 520));
+        ImGui::SetNextWindowPos(
+            ImVec2((GetSystemMetrics(SM_CXSCREEN) - main_w) * 0.5f,
+                   (GetSystemMetrics(SM_CYSCREEN) - main_h) * 0.5f),
+            ImGuiCond_Once);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 16.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(24, 24));
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, Menu::Palette::Background());
 
-        draw->AddRectFilled(ImVec2(pos.x + 160, pos.y), ImVec2(pos.x + 838, pos.y + 535), ImColor(26, 26, 26, int(255 * ImGui::GetStyle( ).Alpha)), 10.f, ImDrawCornerFlags_Right); // right bg
-        draw->AddRect(ImVec2(pos.x + 160, pos.y), ImVec2(pos.x + 838, pos.y + 535), ImColor(50, 50, 50, int(255 * ImGui::GetStyle( ).Alpha)), 10.f, ImDrawCornerFlags_Right, 1);    // right bg
+        ImGui::Begin("PhantomUI", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings);
+        ImDrawList* draw_list = ImGui::GetWindowDrawList( );
+        ImVec2 p = ImGui::GetCursorScreenPos( );
+        float window_width = ImGui::GetWindowWidth( );
+        float window_height = ImGui::GetWindowHeight( );
+        float footer_reserved_h = 70.0f;
 
-        ImGui::SetCursorPos(ImVec2(36, -7));
-        ImGui::Image((ImTextureID)logo.DS, ImVec2(85, 98)); // logo 2
-    }
+        // ==========================================
+        // 1. HEADER SECTION
+        // ==========================================
+        float logo_radius = 18.0f;
+        ImVec2 logo_center = ImVec2(p.x + logo_radius, p.y + logo_radius);
 
-    void user_info( ) {
-        auto draw = ImGui::GetWindowDrawList( );
-        ImVec2 pos = ImGui::GetWindowPos( );
+        // Bild rund zugeschnitten ins Kreis-Bounding-Box zeichnen
+        ImVec2 img_min = ImVec2(logo_center.x - logo_radius, logo_center.y - logo_radius);
+        ImVec2 img_max = ImVec2(logo_center.x + logo_radius, logo_center.y + logo_radius);
 
-        draw->AddRectFilled(ImVec2(pos.x + 9, pos.y + 486), ImVec2(pos.x + 152, pos.y + 523), ImColor(41, 41, 41, int(255 * ImGui::GetStyle( ).Alpha)), 5.f, ImDrawCornerFlags_All); // right bg
-        draw->AddRect(ImVec2(pos.x + 9, pos.y + 486), ImVec2(pos.x + 152, pos.y + 523), ImColor(50, 50, 50, int(255 * ImGui::GetStyle( ).Alpha)), 5.f, ImDrawCornerFlags_All, 1);    // right bg
+        draw_list->AddImageRounded(
+            Resources::LogoTexture(),
+            img_min, img_max,
+            ImVec2(0, 0), ImVec2(1, 1),
+            IM_COL32(255, 255, 255, 255),
+            logo_radius);
 
-        if (g_licenseDays == "PERMANENT") {
-            days = "";
-        }
-        if (g_licenseDays == "1") {
-            days = "Day left";
-        }
-        draw->AddText(ImVec2(pos.x + 49, pos.y + 488), ImColor(105, 105, 105, int(255 * ImGui::GetStyle( ).Alpha)), last_logged_user.c_str( ));
-        draw->AddText(ImVec2(pos.x + 49, pos.y + 503), ImColor(105, 105, 105, int(255 * ImGui::GetStyle( ).Alpha)), g_licenseDays.c_str( ));
-        draw->AddText(ImVec2(pos.x + 59, pos.y + 503), ImColor(105, 105, 105, int(255 * ImGui::GetStyle( ).Alpha)), days.c_str( ));
-        ImGui::SetCursorPos(ImVec2(15, 490));
-        ImGui::Image((ImTextureID)userlogo.DS, ImVec2(28, 28));
-        ;
-    }
-
-
-    void login_tab( ) {
-
-
-        auto draw = ImGui::GetWindowDrawList( );
-        ImVec2 pos = ImGui::GetWindowPos( );
-        ImVec2 size = ImGui::GetWindowSize( );
-
-        // Background
-        draw->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y), ImColor(26, 26, 26, int(255 * login_alpha)), 10.f);
-        draw->AddRect(pos, ImVec2(pos.x + size.x, pos.y + size.y), ImColor(50, 50, 50, int(255 * login_alpha)), 10.f, ImDrawCornerFlags_All, 1);
-
-        // Title
-        ImGui::SetCursorPos(ImVec2(size.x / 2 - 40, 40));
-        ImGui::Image((ImTextureID)logo.DS, ImVec2(85, 98));
-        // Username 
-
-        ImGui::SetCursorPos(ImVec2(size.x / 2 - 120, 150));
-        ImGui::SetNextItemWidth(240);
-        ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.125f, 0.125f, 0.125f, 1.0f));
-        ImGui::InputText("##username", username, sizeof(username), ImGuiInputTextFlags_CharsNoBlank);
+        ImGui::SetCursorPos(ImVec2(65, 24));
+        ImGui::PushStyleColor(ImGuiCol_Text, Menu::Palette::Text());
+        ImGui::Text("PHANTOM");
         ImGui::PopStyleColor( );
 
-        // Username label
-        draw->AddText(poppins, 18, ImVec2(pos.x + size.x / 2 - 120, pos.y + 130), ImColor(150, 150, 150, int(255 * login_alpha)), "Username");
-
-        // Password input
-        ImGui::SetCursorPos(ImVec2(size.x / 2 - 120, 210));
-        ImGui::SetNextItemWidth(240);
-
-        ImGuiInputTextFlags flags = ImGuiInputTextFlags_Password;
-        if (show_password)
-            flags = 0;
-        ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.125f, 0.125f, 0.125f, 1.0f));
-        ImGui::InputText("##password", password, sizeof(password), flags | ImGuiInputTextFlags_CharsNoBlank);
+        ImGui::SetCursorPos(ImVec2(65, 40));
+        ImGui::PushStyleColor(ImGuiCol_Text, Menu::Palette::Muted());
+        ImGui::Text("v4.2.1");
         ImGui::PopStyleColor( );
-        // Password label
 
-        draw->AddText(icons, 18, ImVec2(pos.x + size.x / 2 - 120, pos.y + 190), ImColor(150, 150, 150, int(255 * login_alpha)), ICON_FA_USER);
-        PulsingText("Password");
-        // Show/Hide password checkbox
-        ImGui::SetCursorPos(ImVec2(size.x / 2 - 100, 250));
-        ImGui::Checkbox("Show Password", &show_password);
+        // ==========================================
+        // Tab Bar (Category Selector)
+        // ==========================================
+        ImGui::SetCursorPos(ImVec2(180, 20));
+        ImVec2 tab_p = ImGui::GetCursorScreenPos( );
+        ImVec2 win_pos = ImGui::GetWindowPos( );
+        float pill_h = 36.0f, pill_w = 360.0f;
+        draw_list->AddRectFilled(tab_p, ImVec2(tab_p.x + pill_w, tab_p.y + pill_h), Menu::Palette::Soft(), 18.0f);
 
-        // Login button
-        ImGui::SetCursorPos(ImVec2(size.x / 2 - 100, 280));
-        ImGui::SetNextItemWidth(200);
-        if (loginInProgress) {
-            ImGui::TextDisabled("Connecting...");
-            
-        } else if (ImGui::Button( " Login", ImVec2(200.0f, 40.0f))) {
-            
-            loginInProgress = true;
-            responseText.clear( );
-            g_licenseDays.clear( );   // ===== NEU: Alte License-Info löschen
-            g_licenseExpiry.clear( ); // =====
+        int cat_counts[3] = {0, 0, 0};
+        for (int m = 0; m < static_cast<int>(modules.size()); m++)
+            if (*modules[m].enabled)
+                cat_counts[modules[m].category]++;
 
-            std::thread([&]( ) {
-                // Hole die rohe Response vom Server
-                std::string rawResponse = LoginRequestWithResponse(
-                    username,
-                    Sha256(password),
-                    GetHWID( ));
+        float tab_y = tab_p.y + 4.0f;
+        float tab_h = pill_h - 8.0f;
 
-                // ===== NEU: Parse die Response mit LicenseInfo =====
-                LicenseInfo licenseInfo = ParseLoginResponse(rawResponse);
+        struct TabRect {
+            float x, w;
+        };
+        static TabRect tab_rects[3];
 
-                if (licenseInfo.success) {
-                    responseText = "OK";
-                    // Speichere die License-Informationen in globalen Variablen
-                    if (licenseInfo.daysLeft == -1)
-                        g_licenseDays = "PERMANENT";
-                    else
-                        g_licenseDays = std::to_string(licenseInfo.daysLeft);
+        float icon_font_size = 15.0f;
+        float icon_gap = 6.0f;
 
-                    g_licenseExpiry = licenseInfo.expiryDate;
-                } else {
-                    // Bei Fehler: Error-Message anzeigen
-                    responseText = licenseInfo.errorMessage;
-                }
-                // ===== ENDE NEU =====
-
-                loginInProgress = false;
-            }).detach( );
+        float local_base_x = (tab_p.x - win_pos.x) + 4.0f;
+        float measure_x = local_base_x;
+        for (int c = 0; c < 3; c++) {
+            ImVec2 icon_size = icons->CalcTextSizeA(icon_font_size, FLT_MAX, 0.0f, categories[c].icon);
+            ImVec2 label_size = ImGui::CalcTextSize(categories[c].label);
+            float tw = icon_size.x + icon_gap + label_size.x + 30.0f; // Padding links/rechts + Badge-Platz
+            tab_rects[c] = {measure_x, tw};
+            measure_x += tw + 6.0f;
         }
 
-        // ===== NEU: Response-Handling mit License-Info Display =====
-        if (!responseText.empty( )) {
-            ImVec4 color(1.f, 0.5f, 0.f, 1.f);
-            std::string msg = responseText;
+        static float highlight_local_x = 0.0f, highlight_local_w = 0.0f;
+        static bool highlight_init = false;
 
-            if (responseText == "OK") {
-                color = ImVec4(0.2f, 1.f, 0.4f, 1.f);
-                msg = "Login successful";
-                logged_in = true;
-                last_logged_user = username;
-            } else if (responseText == "FAIL")
-                msg = "Invalid credentials";
-            else if (responseText == "LICENSE_INVALID")
-                msg = "No active license";
-            else if (responseText == "HWID_MISMATCH")
-                msg = "HWID mismatch";
-            else if (responseText == "NO_LICENSE")
-                msg = "No license activated";
-            else if (responseText == "License expired")
-                msg = "Your license has expired";
-            else if (responseText == "User not Found")
-                msg = "User not found";
-            else if (responseText == "This User is banned")
-                msg = "This account is banned";
+        TabRect target = tab_rects[last_category];
+        if (!highlight_init) {
+            highlight_local_x = target.x;
+            highlight_local_w = target.w;
+            highlight_init = true;
+        }
+        highlight_local_x += (target.x - highlight_local_x) * ImSaturate(ImGui::GetIO( ).DeltaTime * 12.0f);
+        highlight_local_w += (target.w - highlight_local_w) * ImSaturate(ImGui::GetIO( ).DeltaTime * 12.0f);
 
-            ImGui::SetCursorPos(ImVec2(size.x / 2 - 55, 340));
-            ImGui::TextColored(color, "%s", msg.c_str( ));
+        float highlight_x = highlight_local_x + win_pos.x;
+        float highlight_w = highlight_local_w;
 
-            // ===== DISPLAY LICENSE-INFO =====
-            if (!g_licenseDays.empty( )) {
-                ImGui::Spacing( );
-                ImGui::Separator( );
-                ImGui::Spacing( );
+        draw_list->AddRectFilled(ImVec2(highlight_x, tab_y), ImVec2(highlight_x + highlight_w, tab_y + tab_h), Menu::Palette::Card(), 14.0f);
 
-                // License days
-                ImGui::Text("License Information:");
-                ImVec4 licenseColor(0.6f, 0.8f, 1.f, 1.f);
+        for (int c = 0; c < 3; c++) {
+            bool is_active = (c == last_category);
+            ImU32 col = is_active ? Menu::Palette::Accent() : Menu::Palette::Muted();
 
-                if (g_licenseDays == "PERMANENT") {
-                    licenseColor = ImVec4(0.2f, 1.f, 0.4f, 1.f); // Grün für permanent
-                    ImGui::TextColored(licenseColor, "Status: PERMANENT");
-                } else {
-                    ImGui::TextColored(licenseColor, "Days Left: %s", g_licenseDays.c_str( ));
-                }
+            float screen_x = tab_rects[c].x + win_pos.x;
 
-                ImGui::TextColored(licenseColor, "Expires: %s", g_licenseExpiry.c_str( ));
+            // Icon mit der Icon-Font zeichnen
+            float icon_font_size = 15.0f;
+            draw_list->AddText(icons, icon_font_size, ImVec2(screen_x + 10, tab_y + 9), col, categories[c].icon);
+
+            // Icon-Breite messen, um das Label sauber danach zu positionieren
+            ImVec2 icon_size = icons->CalcTextSizeA(icon_font_size, FLT_MAX, 0.0f, categories[c].icon);
+            float icon_gap = 6.0f;
+
+            // Label mit der normalen Text-Font
+            draw_list->AddText(ImVec2(screen_x + 10 + icon_size.x + icon_gap, tab_y + 8), col, categories[c].label);
+
+            if (cat_counts[c] > 0) {
+                float badge_cx = screen_x + tab_rects[c].w - 14.0f;
+                float badge_cy = tab_y + tab_h * 0.5f;
+                draw_list->AddCircleFilled(ImVec2(badge_cx, badge_cy), 8.0f, Menu::Palette::Accent());
+                char count_buf[8];
+                snprintf(count_buf, sizeof(count_buf), "%d", cat_counts[c]);
+                draw_list->AddText(ImVec2(badge_cx - 3, badge_cy - 7), Theme::Current().onAccent, count_buf);
             }
-            // ===== ENDE LICENSE-INFO =====
+
+            ImGui::SetCursorScreenPos(ImVec2(screen_x, tab_y));
+            ImGui::PushID(c);
+            ImGui::InvisibleButton("##cat_tab", ImVec2(tab_rects[c].w, tab_h));
+            if (ImGui::IsItemClicked( ) && c != active_page && trans_t < 0.0f) {
+                trans_from = active_page;
+                trans_to = c;
+                trans_t = 0.0f;
+            }
+            ImGui::PopID( );
         }
+
+        // Top Right Icons (Config, Settings, SeedCracker)
+        ImVec2 icons_screen_pos = ImVec2(win_pos.x + window_width - 80, win_pos.y + 28);
+        float icon_slot_w = 22.0f;
+
+        ImU32 config_icon_col = (active_page == PAGE_CONFIG) ? Menu::Palette::Accent() : Menu::Palette::Muted();
+        ImU32 settings_icon_col = (active_page == PAGE_SETTINGS) ? Menu::Palette::Accent() : Menu::Palette::Muted();
+        ImU32 seedcracker_icon_col = (active_page == PAGE_SEEDCRACKER) ? Menu::Palette::Accent() : Menu::Palette::Muted();
+
+        ImGui::PushFont(icons);
+        ImGui::SetWindowFontScale(0.5f);
+        draw_list->AddText(icons_screen_pos, config_icon_col, ICON_FA_FILE);
+        draw_list->AddText(ImVec2(icons_screen_pos.x + icon_slot_w, icons_screen_pos.y), settings_icon_col, ICON_FA_WRENCH);
+        draw_list->AddText(ImVec2(icons_screen_pos.x + icon_slot_w * 2.0f, icons_screen_pos.y), seedcracker_icon_col, ICON_FA_ANCHOR);
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::PopFont( );
+
+        // Config-Icon
+        ImGui::SetCursorScreenPos(ImVec2(icons_screen_pos.x - 4, icons_screen_pos.y - 4));
+        if (ImGui::InvisibleButton("##icon_config", ImVec2(icon_slot_w, 20.0f))) {
+            if (active_page != PAGE_CONFIG && trans_t < 0.0f) {
+                trans_from = active_page;
+                trans_to = PAGE_CONFIG;
+                trans_t = 0.0f;
+            }
+        }
+        // Settings-Icon
+        ImGui::SetCursorScreenPos(ImVec2(icons_screen_pos.x + icon_slot_w - 4, icons_screen_pos.y - 4));
+        if (ImGui::InvisibleButton("##icon_settings", ImVec2(icon_slot_w, 20.0f))) {
+            if (active_page != PAGE_SETTINGS && trans_t < 0.0f) {
+                trans_from = active_page;
+                trans_to = PAGE_SETTINGS;
+                trans_t = 0.0f;
+            }
+        }
+        // SeedCracker-Icon
+        ImGui::SetCursorScreenPos(ImVec2(icons_screen_pos.x + icon_slot_w * 2.0f - 4, icons_screen_pos.y - 4));
+        if (ImGui::InvisibleButton("##icon_seedcracker", ImVec2(icon_slot_w, 20.0f))) {
+            if (active_page != PAGE_SEEDCRACKER && trans_t < 0.0f) {
+                trans_from = active_page;
+                trans_to = PAGE_SEEDCRACKER;
+                trans_t = 0.0f;
+            }
+        }
+        // ==========================================
+        // 2. MODULES SECTION (Cards)
+        // ==========================================
+
+        // ===== Hotkey-Aufnahme: wartet auf die nÃƒÂ¤chste gedrÃƒÂ¼ckte Taste =====
+        ImGui::SetCursorPosY(80);
+
+        float content_alpha = 1.0f;
+        int display_page = active_page;
+
+        if (trans_t >= 0.0f) {
+            trans_t += ImGui::GetIO( ).DeltaTime * 5.0f;
+
+            if (trans_t < 0.5f) {
+                display_page = trans_from;
+                content_alpha = 1.0f - (trans_t / 0.5f);
+            } else if (trans_t < 1.0f) {
+                display_page = trans_to;
+                content_alpha = (trans_t - 0.5f) / 0.5f;
+                active_page = trans_to;
+                if (trans_to < 3)
+                    last_category = trans_to;
+            } else {
+                trans_t = -1.0f;
+                active_page = trans_to;
+                if (trans_to < 3)
+                    last_category = trans_to;
+                display_page = active_page;
+                content_alpha = 1.0f;
+            }
+        }
+
+        ImGui::PushStyleVar(ImGuiStyleVar_Alpha, content_alpha);
+
+        if (display_page < 3) {
+            const float cardsHeight = win_pos.y + window_height - 24.0f - footer_reserved_h - 12.0f - ImGui::GetCursorScreenPos().y;
+            // Hide the scrollbar without disabling mouse-wheel scrolling or reserving its width.
+            ImGui::BeginChild("ModuleCards", ImVec2(window_width - 48.0f, (std::max)(1.0f, cardsHeight)), false, ImGuiWindowFlags_NoScrollbar);
+            draw_list = ImGui::GetWindowDrawList();
+            for (int i = 0; i < static_cast<int>(modules.size()); i++) {
+                if (modules[i].category != display_page)
+                    continue;
+
+                ImGui::PushID(i);
+
+                ImVec2 card_p = ImGui::GetCursorScreenPos( );
+                float card_w = ImGui::GetContentRegionAvail().x;
+                float header_h = 60.0f;
+
+                bool has_settings = !modules[i].settings_list.empty( );
+
+                // --- Expand-Animation ---
+                bool& expanded = card_expanded[i];
+                float& anim = card_expand_anim[i];
+                float target_h = 0.0f;
+                for (auto& s : modules[i].settings_list)
+                    target_h += SettingRowHeight(s);
+                if (modules[i].enabled == &OreSim_Enabled) target_h += ORESIM_SEED_ROW_HEIGHT;
+                if (has_settings)
+                    target_h += 14.0f;
+                float target_anim = expanded ? target_h : 0.0f;
+                anim += (target_anim - anim) * ImSaturate(ImGui::GetIO( ).DeltaTime * 10.0f);
+
+                float card_h = header_h + anim;
+
+                // --- Card Background & Border ---
+                draw_list->AddRectFilled(card_p, ImVec2(card_p.x + card_w, card_p.y + card_h), ColA(Menu::Palette::Card(), content_alpha), 12.0f);
+                draw_list->AddRect(card_p, ImVec2(card_p.x + card_w, card_p.y + card_h), ColA(Menu::Palette::Border(), content_alpha), 12.0f, 0, 1.0f);
+
+                if (*modules[i].enabled)
+                    draw_list->AddRectFilled(ImVec2(card_p.x, card_p.y + 10), ImVec2(card_p.x + 4, card_p.y + header_h - 10), ColA(Menu::Palette::Accent(), content_alpha), 2.0f);
+
+                draw_list->AddText(ImVec2(card_p.x + 15, card_p.y + 12), ColA(*modules[i].enabled ? Menu::Palette::Text() : Menu::Palette::Muted(), content_alpha), modules[i].name);
+
+                // --- Hotkey-Badge: leer bis gesetzt, klickbar zum Binden ---
+                ImVec2 name_size = ImGui::CalcTextSize(modules[i].name);
+                bool is_capturing = (capturing_module == i);
+
+                std::string hotkey_label;
+                if (is_capturing)
+                    hotkey_label = "...";
+                else if (modules[i].hotkey != 0)
+                    hotkey_label = GetKeyName(modules[i].hotkey);
+                else
+                    hotkey_label = "Set Key";
+
+                ImVec2 hk_size = ImGui::CalcTextSize(hotkey_label.c_str( ));
+                float badge_padding_x = 7.0f;
+                float badge_w = hk_size.x + badge_padding_x * 2.0f;
+                float badge_h = 18.0f;
+                ImVec2 badge_min = ImVec2(card_p.x + 15 + name_size.x + 10.0f, card_p.y + 11.0f);
+                ImVec2 badge_max = ImVec2(badge_min.x + badge_w, badge_min.y + badge_h);
+
+                ImU32 badge_bg = is_capturing ? Menu::Palette::Soft() : Menu::Palette::Background();
+                ImU32 badge_text = is_capturing ? Menu::Palette::Accent() : (modules[i].hotkey != 0 ? Menu::Palette::Text() : Menu::Palette::Muted());
+
+                draw_list->AddRectFilled(badge_min, badge_max, ColA(badge_bg, content_alpha), 4.0f);
+                if (is_capturing)
+                    draw_list->AddRect(badge_min, badge_max, ColA(Menu::Palette::Accent(), content_alpha), 4.0f, 0, 1.5f);
+                draw_list->AddText(ImVec2(badge_min.x + badge_padding_x, badge_min.y + 1.0f), ColA(badge_text, content_alpha), hotkey_label.c_str( ));
+
+                ImGui::SetCursorScreenPos(badge_min);
+                if (ImGui::InvisibleButton("##hotkey_badge", ImVec2(badge_w, badge_h))) {
+                    Config::capturing_menu_key = false;
+                    capturing_module = is_capturing ? -1 : i;
+                }
+                if (ImGui::IsItemHovered( ) && ImGui::IsMouseClicked(1)) {
+                    modules[i].hotkey = 0;
+                    if (is_capturing)
+                        capturing_module = -1;
+                }
+
+                char sub_text[64];
+                snprintf(sub_text, sizeof(sub_text), "%d settings", (int)modules[i].settings_list.size( ));
+                draw_list->AddText(ImVec2(card_p.x + 15, card_p.y + 35), ColA(Menu::Palette::Muted(), content_alpha), sub_text);
+
+                ImVec2 sub_size = ImGui::CalcTextSize(sub_text);
+                if (has_settings)
+                    draw_list->AddText(ImVec2(card_p.x + 15 + sub_size.x + 5, card_p.y + 35), ColA(Menu::Palette::Muted(), content_alpha), expanded ? "^" : ICON_FA_CHEVRON_D);
+
+                if (modules[i].active_settings > 0) {
+                    draw_list->AddCircleFilled(ImVec2(card_p.x + 95, card_p.y + 42), 2.0f, ColA(Menu::Palette::Muted(), content_alpha));
+                    char active_text[64];
+                    snprintf(active_text, sizeof(active_text), "%d active", modules[i].active_settings);
+                    draw_list->AddText(ImVec2(card_p.x + 105, card_p.y + 35), ColA(Menu::Palette::Accent(), content_alpha), active_text);
+                    draw_list->AddText(ImVec2(card_p.x + 105 + ImGui::CalcTextSize(active_text).x + 5, card_p.y + 35), ColA(Menu::Palette::Muted(), content_alpha), ICON_FA_CHEVRON_D);
+                }
+
+                // --- Klickbereich: nur der Header klappt die Card auf/zu ---
+                float left_w = badge_min.x - card_p.x;
+                ImGui::SetCursorScreenPos(card_p);
+                if (has_settings && left_w > 1.0f) {
+                    if (ImGui::InvisibleButton("##card_click_l", ImVec2(left_w, header_h)))
+                        expanded = !expanded;
+                }
+
+                float right_start_x = badge_max.x;
+                float right_w = (card_p.x + card_w - 60.0f) - right_start_x;
+                if (has_settings && right_w > 1.0f) {
+                    ImGui::SetCursorScreenPos(ImVec2(right_start_x, card_p.y));
+                    if (ImGui::InvisibleButton("##card_click_r", ImVec2(right_w, header_h)))
+                        expanded = !expanded;
+                }
+
+                // --- Toggle Switch rechts (Enable/Disable, unabhÃƒÂ¤ngig vom Expand) ---
+                float card_toggle_w = 36.0f, card_toggle_h = 20.0f;
+                float card_toggle_margin = 20.0f;
+                ImGui::SetCursorScreenPos(ImVec2(card_p.x + card_w - card_toggle_margin - card_toggle_w, card_p.y + header_h * 0.5f - card_toggle_h * 0.5f));
+                CustomToggle("##mod_toggle", modules[i].enabled, content_alpha, card_toggle_w, card_toggle_h);
+
+                // --- Settings-Inhalt rendern, sobald sichtbar ---
+                if (anim > 1.0f) {
+                    draw_list->PushClipRect(card_p, ImVec2(card_p.x + card_w, card_p.y + card_h), true);
+
+                    float sy = card_p.y + header_h + 8.0f;
+                    float row_w = card_w - 40.0f;
+                    if (modules[i].enabled == &OreSim_Enabled) {
+                        ImGui::SetCursorScreenPos(ImVec2(card_p.x + 20, sy));
+                        DrawOreSimSeedInput(draw_list, ImVec2(card_p.x + 20, sy), row_w, content_alpha);
+                        sy += ORESIM_SEED_ROW_HEIGHT;
+                    }
+                    for (auto& s : modules[i].settings_list) {
+                        ImGui::PushID(s.name);
+                        switch (s.type) {
+                            case SettingType::Checkbox:
+                                DrawCheckboxRow(draw_list, ImVec2(card_p.x + 20, sy), row_w, s.name, s.b_val, content_alpha);
+                                break;
+                            case SettingType::SliderInt:
+                                DrawSliderRow(draw_list, ImVec2(card_p.x + 20, sy), row_w, s.name, s.i_val, s.i_min, s.i_max, s.suffix, content_alpha);
+                                break;
+                        }
+                        ImGui::PopID( );
+                        sy += SettingRowHeight(s);
+                    }
+
+                    draw_list->PopClipRect( );
+                }
+
+                ImGui::SetCursorScreenPos(ImVec2(card_p.x, card_p.y + card_h + 12.0f));
+                ImGui::PopID( );
+            }
+            ImGui::Dummy(ImVec2(1,1));
+            ImGui::EndChild();
+            draw_list = ImGui::GetWindowDrawList();
+        } else {
+            // ==========================================
+            // Config- / Settings-Seite (wie eine normale Kategorie-Seite gerendert)
+            // ==========================================
+            ImVec2 page_area_min = ImGui::GetCursorScreenPos( );
+            float page_area_w = window_width - 48.0f;
+            float footer_top_y = win_pos.y + window_height - 24.0f - footer_reserved_h;
+            float page_area_h = (footer_top_y - 12.0f) - page_area_min.y;
+
+            if (display_page == PAGE_CONFIG)
+                Pages::DrawConfigPage(draw_list, page_area_min, page_area_w, page_area_h, content_alpha, modules.data(), static_cast<int>(modules.size()));
+            else if (display_page == PAGE_SETTINGS)
+                Pages::DrawSettingsPage(draw_list, page_area_min, page_area_w, page_area_h, content_alpha);
+            else if (display_page == PAGE_SEEDCRACKER)
+                Pages::DrawSeedCrackerPage(draw_list, page_area_min, page_area_w, page_area_h, content_alpha);
+        }
+
+        ImGui::PopStyleVar( ); // Alpha
+
+        // ==========================================
+        // 3. FOOTER SECTION
+        // ==========================================
+        ImVec2 footer_p = ImVec2(p.x, win_pos.y + window_height - 24.0f - footer_reserved_h);
+
+        ImVec2 footer_bg_min = ImVec2(footer_p.x - 8.0f, footer_p.y + 5.0f);
+        ImVec2 footer_bg_max = ImVec2(footer_p.x + window_width - 48.0f + 8.0f, footer_p.y + 65.0f);
+        draw_list->AddRectFilled(footer_bg_min, footer_bg_max, Menu::Palette::Background(), 10.0f);
+
+        draw_list->AddLine(ImVec2(footer_p.x, footer_p.y), ImVec2(footer_p.x + window_width - 48, footer_p.y), Menu::Palette::Border());
+
+        footer_p.y += 15;
+
+        float avatar_radius = 16.0f;
+        ImVec2 avatar_center = ImVec2(footer_p.x + 18, footer_p.y + 18);
+
+        draw_list->AddCircleFilled(ImVec2(avatar_center.x, avatar_center.y + 1.5f), avatar_radius + 1.0f, IM_COL32(0, 0, 0, 20));
+        draw_list->AddCircleFilled(avatar_center, avatar_radius + 2.0f, IM_COL32(255, 255, 255, 255));
+
+        ImVec2 avatar_min = ImVec2(avatar_center.x - avatar_radius, avatar_center.y - avatar_radius);
+        ImVec2 avatar_max = ImVec2(avatar_center.x + avatar_radius, avatar_center.y + avatar_radius);
+        draw_list->AddImageRounded(Resources::UserTexture(), avatar_min, avatar_max, ImVec2(0, 0), ImVec2(1, 1), IM_COL32(255, 255, 255, 255), avatar_radius);
+
+        draw_list->AddCircle(avatar_center, avatar_radius, Menu::Palette::Accent(), 0, 1.5f);
+
+        ImVec2 status_pos = ImVec2(footer_p.x + 30, footer_p.y + 30);
+        draw_list->AddCircleFilled(status_pos, 5.5f, IM_COL32(255, 255, 255, 255));
+        draw_list->AddCircleFilled(status_pos, 4.0f, Menu::Palette::Success());
+        DrawGlowCircle(draw_list, status_pos, 4.0f, Menu::Palette::Success(), 1.0f, 3);
+
+        draw_list->AddText(ImVec2(footer_p.x + 45, footer_p.y + 4), Menu::Palette::Text(), Login::UserName().c_str( ));
+
+        ImVec2 username_size = ImGui::CalcTextSize(Login::UserName().c_str( ));
+        float badge_gap = 10.0f;
+        ImVec2 badge_text_size = ImGui::CalcTextSize("BETA");
+        float badge_padding_x2 = 8.0f;
+        float badge_w2 = badge_text_size.x + badge_padding_x2 * 2.0f;
+        float badge_h2 = 17.0f;
+
+        ImVec2 badge_p2 = ImVec2(footer_p.x + 45 + username_size.x + badge_gap, footer_p.y + 3.5f);
+        draw_list->AddRectFilled(badge_p2, ImVec2(badge_p2.x + badge_w2, badge_p2.y + badge_h2), Menu::Palette::Soft(), badge_h2 * 0.5f);
+        draw_list->AddText(ImVec2(badge_p2.x + badge_padding_x2, badge_p2.y + 0.8f), Menu::Palette::Accent(), "BETA");
+
+        draw_list->AddText(ImVec2(footer_p.x + 45, footer_p.y + 21), ImColor(140, 150, 170), "Online");
+
+        float right_align_x = footer_p.x + window_width - 48.0f - 140.0f;
+
+        if (Login::LicenseDays() == "PERMANENT") {
+            draw_list->AddText(ImVec2(right_align_x, footer_p.y + 6), ColA(Menu::Palette::Muted(), 1.0f), "LICENSE");
+            draw_list->AddText(ImVec2(right_align_x, footer_p.y + 20), Menu::Palette::Accent(), "Permanent");
+        } else {
+            draw_list->AddText(ImVec2(right_align_x, footer_p.y + 6), ColA(Menu::Palette::Muted(), 1.0f), "EXPIRES");
+            char expiryBuffer[64];
+            snprintf(expiryBuffer, sizeof(expiryBuffer), "%s", Login::LicenseExpiry().c_str( ));
+            draw_list->AddText(ImVec2(right_align_x, footer_p.y + 20), Menu::Palette::Text(), expiryBuffer);
+        }
+
+        // ==========================================
+        // Config/Settings werden weiter oben bereits als vollwertige Seite
+        // im Content-Bereich gerendert (siehe display_page < 3 Verzweigung).
+        // ==========================================
+
+        if (Config::particles_enabled)
+            Particles( );
+        ImGui::End( );
+        ImGui::PopStyleColor( );
+        ImGui::PopStyleVar(2);
     }
 
-    void test_tab( ) {
-        auto draw = ImGui::GetWindowDrawList( );
-        ImVec2 pos = ImGui::GetWindowPos( );
-        ImVec2 size = ImGui::GetWindowSize( );
-        ImGui::SetCursorPos(ImVec2(169, 134));
-        ImGui::BeginChild("General", ImVec2(320, 240), true);
-        {
-
-            ImGui::Spacing( );
-            //    ImGui::SetCursorPosX(10);
-            ImGui::Checkbox("Enable CW", &CW_Enabled);
-            ImGui::SliderInt("Delay", &CW_Delay, 0, 4);
-            ImGui::Checkbox("Enable FastPlace", &FastPlace_Enabled);
-            ImGui::Checkbox("Enable Reach", &Reach_Enabled);
-            ImGui::SliderInt("Range", &Reach_range, 3, 6);
-            ImGui::Checkbox("Enable AutoTotem", &AutoTotem_Enabled);
-            ImGui::Checkbox("Enable NoJumpDelay", &NoJumpDelay_Enabled);
-            ImGui::Checkbox("Enable AutoSprint", &AutoSprint_Enabled);
-            ImGui::Checkbox("Enable HitCrystal", &HitCrystal_Enabled);
-            ImGui::Checkbox("Enable SilentAim", &Silent_Aim_Enabled);
+    void Shutdown(bool vulkanTextures) {
+        Lifecycle::Trace("Menu: stop Java features");
+        Menu_Enabled=false;
+        SeedCracker_Enabled=false;OreSim_Enabled=false;PlayerESP_Enabled=false;
+        AutoArmor_Enabled=false;Refill_Enabled=false;HitEffect_Enabled=false;PredictDoubleHand_Enabled=false;ShieldBreaker_Enabled=false;
+        if(auto env=SeedCracker::GetMinecraftJNIEnv()) {
+            SeedCracker::RequestClientUpdate(env,false);
+            if(OreSim::bridge) {
+                env->CallStaticVoidMethod(OreSim::bridge,OreSim::request,0,1,JNI_FALSE,jlong(0),JNI_FALSE);
+                if(env->ExceptionCheck()) env->ExceptionClear();
+                env->DeleteGlobalRef(OreSim::bridge);OreSim::bridge=nullptr;
+            }
+            if(PlayerESP::bridge) {env->DeleteGlobalRef(PlayerESP::bridge);PlayerESP::bridge=nullptr;}
+            if(PlayerESP::skinBridge) {env->DeleteGlobalRef(PlayerESP::skinBridge);PlayerESP::skinBridge=nullptr;}
         }
-        ImGui::EndChild( );
-        
-        
-    }
-
-    void RenderTabs( ) {
-        auto draw = ImGui::GetWindowDrawList( );
-        ImVec2 pos = ImGui::GetWindowPos( );
-
-        draw->AddText(poppins, 17, ImVec2(pos.x + 13, pos.y + 81), ImColor(105, 105, 105, int(255 * ImGui::GetStyle( ).Alpha)), "Combat");         // right bg
-        draw->AddText(poppins, 17, ImVec2(pos.x + 13, pos.y + 210), ImColor(105, 105, 105, int(255 * ImGui::GetStyle( ).Alpha)), "Visuals");       // right bg
-        draw->AddText(poppins, 17, ImVec2(pos.x + 13, pos.y + 348), ImColor(105, 105, 105, int(255 * ImGui::GetStyle( ).Alpha)), "Miscellaneous"); // right bg
-
-        ImGui::SetCursorPos(ImVec2(13, 99));
-        if (ImGui::Rendertab(ICON_FA_USER, "Aim Assist", !m_tabs))
-            m_tabs = 0;
-
-        ImGui::SetCursorPos(ImVec2(13, 136));
-        if (ImGui::Rendertab("e", "Clicker", m_tabs == 1))
-            m_tabs = 1;
-
-        ImGui::SetCursorPos(ImVec2(13, 174));
-        if (ImGui::Rendertab("a", "Velocity", m_tabs == 2))
-            m_tabs = 2;
-
-        ImGui::SetCursorPos(ImVec2(13, 228));
-        if (ImGui::Rendertab("x", "Players", m_tabs == 3))
-            m_tabs = 3;
-
-        ImGui::SetCursorPos(ImVec2(13, 266));
-        if (ImGui::Rendertab("w", "World", m_tabs == 4))
-            m_tabs = 4;
-
-        ImGui::SetCursorPos(ImVec2(13, 304));
-        if (ImGui::Rendertab("v", "ESP", m_tabs == 5))
-            m_tabs = 5;
-
-        ImGui::SetCursorPos(ImVec2(13, 369));
-        if (ImGui::Rendertab("s", "Inventory", m_tabs == 6))
-            m_tabs = 6;
-
-        ImGui::SetCursorPos(ImVec2(13, 407));
-        if (ImGui::Rendertab("z", "Settings", m_tabs == 7))
-            m_tabs = 7;
-
-        ImGui::SetCursorPos(ImVec2(13, 445));
-        if (ImGui::Rendertab("c", "Configs", m_tabs == 8))
-            m_tabs = 8;
-        switch (m_tabs) {
-            case 0:
-                test_tab( );
-                break; // aim assist
-            case 1:
-                break; // Clicker
-            case 2:
-                break; // ANTI-AIM
-            case 3:
-                break; // PlAYERS
-            case 4:
-                break; // WORLD
-            case 5:
-                break; // VIEW
-            case 6:
-                break; // Inventory
-            case 7:
-                break; // Settings
-            case 8:
-                break; // CONFIGS
-        }
+        Lifecycle::Trace("Menu: release textures");
+        Resources::ReleaseTextures(vulkanTextures);
     }
 
     void Render( ) {
-    //    if (!Menu_Enabled)
-     //       return;
+        Performance::Scope clientTiming(Performance::Client);
+        Theme::ApplyStyle();
+        Registry::ProcessHotkeys(!Login::IsLoggedIn());
+        Registry::CaptureHotkey(); // LÃƒÂ¤uft immer, auch bei geschlossenem MenÃƒÂ¼
 
-            if (!logged_in) {
+        if (!Login::IsLoggedIn()) {
+            Login::Render(Menu_Enabled, Particles);
+        } else {
+            StatusHud::Draw();
             if (Menu_Enabled)
-                login_alpha = ImClamp(login_alpha + (2.f * ImGui::GetIO( ).DeltaTime * 1.5f), 0.f, 1.f);
+                open_alpha = ImClamp(open_alpha + (2.f * ImGui::GetIO( ).DeltaTime * (toggled ? 1.5f : -1.5f)), 0.f, 1.f);
             else
-                login_alpha = 0;
+                open_alpha = 0;
 
-                if (login_alpha > 0.01f) {
-                    ImGui::SetNextWindowSize(ImVec2(838 * 1.0f, 535 * 1.0f));
-                    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, login_alpha);
-                    ImGui::Begin("Login", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground);
-                    {
-                        login_tab( );
-                        Particles( );
-                    }
-                    ImGui::End( );
-                    ImGui::PopStyleVar( );
-                }
-            } 
-            else {
-                if (Menu_Enabled)
-                    open_alpha = ImClamp(open_alpha + (2.f * ImGui::GetIO( ).DeltaTime * (toggled ? 1.5f : -1.5f)), 0.f, 1.f);
-                else
-                    open_alpha = 0;
-
-                if (open_alpha > 0.01f) {
-                    ImGui::SetNextWindowSize(ImVec2(838 * 1.0f, 535 * 1.0f));
-                    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, open_alpha);
-                    ImGui::Begin("Main GUI", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground);
-                    {
-                        Decoration( );
-                        RenderTabs( );
-                        user_info( );
-                        Particles( );
-                    }
-                    ImGui::End( );
-                    ImGui::PopStyleVar( );
-                }
+            if (open_alpha > 0.01f) {
+                DrawPhantomMenu( );
             }
+        }
+        { Performance::Scope timing(Performance::OreSim); OreSim::Render(); }
+        { Performance::Scope timing(Performance::PlayerESP); PlayerESP::Render(); }
+        UtilitySuite::Render();
     }
 } // namespace Menu
+

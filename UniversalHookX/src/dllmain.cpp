@@ -1,72 +1,52 @@
 #include <Windows.h>
-#include <iostream>
-#include <thread>
-
+#include "base.hpp"
 #include "console/console.hpp"
-
 #include "hooks/hooks.hpp"
-#include "utils/utils.hpp"
-#include "dependencies/jni/jni.h"
 #include "dependencies/minhook/MinHook.h"
 #include "utils/sdk/java.hpp"
-#include "Base.hpp"
+#include "modules/ModuleManager.hpp"
+#include "input/rotation/manual_attack.hpp"
+#include "utils/seedcracker/seedcracker_bridge.hpp"
 
-DWORD WINAPI OnProcessAttach(LPVOID lpParam);
-DWORD WINAPI OnProcessDetach(LPVOID lpParam);
-
-extern bool m_initialized;
-
-
-
-
-BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved) {
-
-    
-
-    if (fdwReason == DLL_PROCESS_ATTACH) {
-        DisableThreadLibraryCalls(hinstDLL);
-        
-        U::SetRenderingBackend(VULKAN);
-
-        HANDLE hHandle = CreateThread(NULL, 0, OnProcessAttach, hinstDLL, 0, NULL);
-        if (hHandle != NULL) {
-            CloseHandle(hHandle);
-        }
-    } else if (fdwReason == DLL_PROCESS_DETACH && !lpReserved) {
-        OnProcessDetach(NULL);
-    }
-
-
-    return TRUE;
-}
-
-DWORD WINAPI OnProcessAttach(LPVOID lpParam) {
-    Console::Alloc( );
-    p_jni = std::make_unique<JNI>( );
-    
-    LOG("[+] Rendering backend: %s\n", U::RenderingBackendToStr( ));
-    if (U::GetRenderingBackend( ) == NONE) {
-        LOG("[!] Looks like you forgot to set a backend. Will unload after pressing enter...");
-        std::cin.get( );
-        
-        FreeLibraryAndExitThread(reinterpret_cast<HMODULE>(lpParam), 0);
+static DWORD WINAPI ClientWorker(LPVOID parameter) {
+    Base::m_hModule=static_cast<HMODULE>(parameter);
+    Lifecycle::InitTrace(Base::hModule);
+    Lifecycle::Trace("DLL started: embedded font ownership fix installed");
+    Console::Alloc();
+    MH_Initialize();
+    p_jni=std::make_unique<JNI>();
+    H::Init();
+    Base::Init();
+    if(p_jni) ManualAttack::Shutdown(p_jni->GetEnv());
+    Base::Unload();
+    Lifecycle::Trace("Unload requested; joining workers");
+    Lifecycle::JoinWorkers();
+    Lifecycle::Trace("Workers joined; removing hooks");
+    // This waits for render-thread cleanup and all callbacks before freeing code.
+    if(!H::Free()) { OutputDebugStringA("[Unload] Cleanup incomplete; DLL remains mapped.\n"); return 0; } // On a teardown error keep the DLL mapped.
+    Lifecycle::Trace("Hooks drained; uninitializing MinHook");
+    if(MH_Uninitialize()!=MH_OK) {
+        OutputDebugStringA("[Unload] MinHook teardown failed; DLL kept mapped.\n");
         return 0;
     }
-
-    MH_Initialize( );
-    H::Init( );
-    Base::Init( );
-
-  
-    
-    return 0;
+    Lifecycle::Trace("Clearing modules");
+    ModuleManager::GetModules().clear();
+    Lifecycle::Trace("Releasing bridge references");
+    if(p_jni) SeedCracker::Shutdown(p_jni->GetEnv());
+    Lifecycle::Trace("Releasing SDK / detaching worker JNI");
+    p_jni.reset(); // JNI cache destructors run before this thread detaches from the VM.
+    Lifecycle::Trace("Detaching console");
+    Console::Free();
+    Lifecycle::Trace("Final FreeLibraryAndExitThread");
+    FreeLibraryAndExitThread(Base::hModule,0);
 }
-
-DWORD WINAPI OnProcessDetach(LPVOID lpParam) {
-    H::Free( );
-    MH_Uninitialize( );
-
-    Console::Free( );
-
-    return 0;
+BOOL WINAPI DllMain(HINSTANCE module,DWORD reason,LPVOID) {
+    if(reason==DLL_PROCESS_ATTACH) {
+        Base::hModule=module;
+        DisableThreadLibraryCalls(module);
+        HANDLE thread=CreateThread(nullptr,0,ClientWorker,module,0,nullptr);
+        if(thread) CloseHandle(thread); else return FALSE;
+    }
+    // No waits, hooks, JNI, or FreeLibrary calls under the loader lock.
+    return TRUE;
 }

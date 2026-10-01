@@ -6,6 +6,7 @@
 
 class ModuleBase {
 public:
+    virtual ~ModuleBase() = default;
     virtual void Update( ) = 0;
     virtual void RenderOverlay( ) = 0;
     virtual void RenderHud( ) = 0;

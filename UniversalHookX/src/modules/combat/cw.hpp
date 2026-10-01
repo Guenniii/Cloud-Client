@@ -1,24 +1,14 @@
 #pragma once
-#include "../ModulBase.hpp"
+#include "../RuntimeModule.hpp"
+#include <memory>
+class CwCrystal;
 
-class CW : public ModuleBase
-{
+// CW owns only its crystal worker; other features have independent modules.
+class CW final : public RuntimeModule {
 public:
-    virtual void Update( );
-    virtual void RenderOverlay( );
-    virtual void RenderHud( );
-
-    virtual void RenderMenu( );
-
-    virtual std::string GetName( );
-    virtual std::string GetCategory( );
-    virtual int GetKey( );
-
-    virtual bool IsEnabled( );
-    virtual void SetEnabled(bool enabled);
-    virtual void Toggle( );
-    
+    CW();
+    ~CW() override;
 private:
-    std::string CW;
-    std::string combat;
+    void Tick() override;
+    std::unique_ptr<CwCrystal> g_crystal;
 };

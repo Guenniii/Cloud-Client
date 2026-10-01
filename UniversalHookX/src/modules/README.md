@@ -1,0 +1,21 @@
+# Runtime modules
+
+`ModuleManager` owns the runtime modules in their feature update order. `RuntimeModule` binds each module to the same boolean setting used by menu and config. The menu registry remains a separate presentation/config schema.
+
+`RuntimeModule::Update` dispatches enabled ticks and one falling-edge tick. The existing SDK guard defers both while JNI/CMinecraft is unavailable. This preserves Reach restoration and SeedCracker's disable message/state without polling inactive features. `SetEnabled` and `Toggle` now update the actual setting.
+
+Each adapter owns its feature instance with `unique_ptr`; SeedCracker timing and initialization state are module members. The client must join Lifecycle workers before clearing modules and release SDK wrappers afterwards. Existing DLL shutdown ordering does this. Do not clear/reinitialize modules while their workers run.
+
+The CW worker retains its existing once-started lifetime and global unload stop condition. This architectural split does not change its in-game disable/restart behavior or JNI reference ownership inside the helper classes. OreSim and PlayerESP continue through their existing render-thread paths.
+
+To add a module: implement a RuntimeModule adapter, register its factory in the manager, bind the existing/new setting, then add menu metadata separately. Register new source files in both Visual Studio project files.
+
+Auto Armor, Refill, Hit Effect, Predict Double Hand and Auto Shield Breaker share `UtilitySuiteBridge` and client-thread dispatch, but have independent flags, settings and hotkeys. The SDK publishes a short-lived snapshot; Minecraft actions recheck the world, player, focus and GUI. Auto Armor only runs in the player's inventory screen; Refill only runs with the GUI closed and remembers depleted hotbar slots after observing their item identity. Both use normal container clicks, an empty cursor and shared hotbar ownership. An AutoTotem action needing an offhand totem takes inventory priority.
+
+Predict Double Hand uses normal carried-slot synchronization and can preempt another hotbar lease. All interrupted sequences must check their lease before later steps. Manual slot changes cancel a held prediction until the current danger clears. The melee check estimates vanilla damage, armor, toughness, Protection, Resistance, absorption, Sharpness and mace/Breach effects; unseen attacks and custom server damage cannot be guaranteed. Nearby crystals and charged anchors have separate radius checks; anchors in the Nether are excluded.
+
+Hit Effect observes outgoing attacks and incoming server damage events, including events inside packet bundles. It also accepts hurt animations within 750 ms of a matching outgoing attack and damage events with a missing attacker ID. Such fallback correlation establishes a recent attack plus a server-confirmed hurt, but cannot prove the attacker if another player hits the same victim concurrently. It forwards packets unchanged and consumes each recorded attack at most once. Its capped particles and PlayerESP glow render through the existing ImGui path and current theme. Skin glow uses a coarse union silhouette mask, rather than adding a hitbox or a glow to every skin pixel. Both glow modes are controlled by Player ESP's Glow setting.
+
+Auto Armor supports survival inventory and the player inventory tab of the creative screen. Creative uses the real inventory menu's clicked/broadcastChanges path with its vanilla creative slot listener; other creative tabs are excluded. AutoTotem only takes inventory priority if it has a totem available to refill. Predict Double Hand also selects a main-hand totem when the offhand already has one, and measures crystal/anchor distance to their bounding boxes at the feet. Auto Shield Breaker switches and attacks immediately without waiting for the axe's attack strength, then returns via shared hotbar ownership.
+
+Auto Armor, Predict Double Hand and Hit Effect have independently switchable Console-Diagnose settings. Their bounded, throttled Java message queue is drained by JNI into the native DLL console; it does not post Minecraft chat messages. Hit Effect additionally reports its incoming packet/attack/burst counters and native frame/projection count. Disable these diagnostics after testing if not needed.
