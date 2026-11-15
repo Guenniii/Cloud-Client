@@ -1,3 +1,4 @@
+#include "../utils/sdk/game_runtime.hpp"
 #include <cstdio>
 #include <mutex>
 #include <thread>
@@ -30,6 +31,8 @@ static WNDPROC oWndProc;
 static LRESULT WINAPI WndProc(const HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     Lifecycle::Callback callback;
     if(H::bShuttingDown) return CallWindowProc(oWndProc,hWnd,uMsg,wParam,lParam);
+    // Game closing: unload like END, otherwise our attached JNI threads keep the JVM from exiting.
+    if(uMsg==WM_DESTROY && hWnd==g_hWindow) { Base::Unload(); return CallWindowProc(oWndProc,hWnd,uMsg,wParam,lParam); }
     if(uMsg==WM_KEYDOWN && wParam==VK_END && !Config::capturing_menu_key && Config::capturing_module_key<0 && !(lParam & (1LL<<30))) { Base::Unload(); return 0; }
     if (uMsg == WM_KEYDOWN) {
         if (!Config::capturing_menu_key && Config::capturing_module_key < 0 && !(lParam & (1LL<<30)) && (int)wParam == Config::menu_keybind) {
@@ -133,7 +136,7 @@ namespace Hooks {
             JNIEnv* env = p_jni->GetEnv( );
 
             // Klasse im Snapshot finden (Beispielhaftes Standard-Mapping)
-            jclass localPlayerClass = env->FindClass("net/minecraft/client/player/LocalPlayer");
+            jclass localPlayerClass = GameRuntime::FindClass(env,"net/minecraft/client/player/LocalPlayer");
             if (localPlayerClass) {
                 // In modernen Java-Umgebungen nutzen JNI-Clients oft JNINativeMethod-Swapping.
                 // Falls du MinHook für die internen JVM-Methoden nutzt, sieht das so aus:
@@ -161,12 +164,13 @@ namespace Hooks {
                 LOG("[Unload] Another window subclass is active; DLL remains mapped.\n"); return false;
             }
             SetLastError(0);
-            if(!SetWindowLongPtr(g_hWindow,GWLP_WNDPROC,reinterpret_cast<LONG_PTR>(oWndProc)) && GetLastError()!=0) return false;
+            if(!SetWindowLongPtr(g_hWindow,GWLP_WNDPROC,reinterpret_cast<LONG_PTR>(oWndProc)) && GetLastError()!=0 && IsWindow(g_hWindow)) return false;
         }
         // Clean up GL/Vulkan on the next presentation, where the proper context exists.
         if(U::GetRenderingBackend()==NONE) Lifecycle::renderStopped=true;
         Lifecycle::Trace("Waiting for render-thread cleanup");
-        while(!Lifecycle::renderStopped) Sleep(10);
+        // A destroyed game window never presents again; its GL/Vulkan resources die with it.
+        while(!Lifecycle::renderStopped && (!g_hWindow || IsWindow(g_hWindow))) Sleep(10);
         Lifecycle::Trace("Render-thread cleanup finished; disabling hooks");
         if(MH_DisableHook(MH_ALL_HOOKS)!=MH_OK) {
             LOG("[Unload] Disabling hooks failed; DLL remains mapped.\n");return false;

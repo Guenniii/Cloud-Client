@@ -27,7 +27,7 @@ namespace Menu::Login {
         static std::string responseText = "";
         static std::string g_licenseDays = "PERMANENT";
         static std::string g_licenseExpiry = "";
-        static bool logged_in = false;
+        static bool logged_in = true;
 
         static bool login_success_pending = false;
         static float login_success_timer = 0.0f;
@@ -59,7 +59,8 @@ namespace Menu::Login {
                     responseText = "OK";
                     g_licenseDays = result.license.daysLeft == -1 ? "PERMANENT" : std::to_string(result.license.daysLeft);
                     g_licenseExpiry = result.license.expiryDate;
-                    last_logged_user = result.user;
+                    last_logged_user = result.license.DisplayName(result.user);
+                    Resources::RequestUserAvatar(last_logged_user);
                     login_success_pending = true;
                     login_success_timer = 0.0f;
                 } else {
@@ -92,7 +93,7 @@ namespace Menu::Login {
         static void DrawAnimatedLogo(ImDrawList* draw, ImVec2 center, float radius, float alpha, float pulse) {
             // Glow-Ringe
             for (int i = 3; i >= 1; --i) {
-                float r = radius + (float)i * 10.0f * pulse;
+                float r = radius + (float)i * 5.0f * pulse;
                 float fa = (0.12f / (float)i) * alpha * pulse;
                 ImVec4 soft = ImGui::ColorConvertU32ToFloat4(Menu::Palette::Accent( ));
                 soft.w = fa;
@@ -209,7 +210,7 @@ namespace Menu::Login {
 
             const float ui_a = card_alpha;
 
-            const char* title = "PHANTOM";
+            const char* title = "Cloud";
             ImVec2 title_sz = ImGui::CalcTextSize(title);
             draw->AddText(ImVec2(card_x + (card_w - title_sz.x) * 0.5f, card_y + 92.0f),
                           ColA(Menu::Palette::Text( ), ui_a), title);
@@ -220,7 +221,7 @@ namespace Menu::Login {
                           ColA(Menu::Palette::Muted( ), ui_a), sub);
 
             {
-                const char* badge = "BETA";
+                const char* badge = "Alpha";
                 ImVec2 bs = ImGui::CalcTextSize(badge);
                 float bw = bs.x + 16.0f, bh = 18.0f;
                 ImVec2 bmin(card_x + (card_w - bw) * 0.5f, card_y + 138.0f);
@@ -363,7 +364,7 @@ namespace Menu::Login {
 
             draw->AddLine(ImVec2(cmin.x + 24, cmax.y - 48), ImVec2(cmax.x - 24, cmax.y - 48),
                           ColA(Menu::Palette::Border( ), ui_a));
-            const char* foot = "v4.2.1  ·  Secure authentication";
+            const char* foot = "Cloud Login";
             ImVec2 fs = ImGui::CalcTextSize(foot);
             draw->AddText(ImVec2(card_x + (card_w - fs.x) * 0.5f, cmax.y - 32.0f),
                           ColA(Menu::Palette::Muted( ), ui_a), foot);

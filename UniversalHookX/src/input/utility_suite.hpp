@@ -1,6 +1,7 @@
 #pragma once
 #include "../modules/settings.hpp"
 #include "assist_options.hpp"
+#include "action_status.hpp"
 #include "../utils/sdk/java.hpp"
 #include "../utils/sdk/jni_safety.hpp"
 #include "../utils/seedcracker/seedcracker_bridge.hpp"
@@ -14,8 +15,11 @@
 namespace UtilitySuite {
 inline std::mutex mutex;
 inline jclass bridge=nullptr;
-inline jmethodID publish=nullptr,clear=nullptr,shield=nullptr,frame=nullptr,drain=nullptr;
+inline jmethodID publish=nullptr,clear=nullptr,shield=nullptr,frame=nullptr,drain=nullptr,status=nullptr;
 inline auto drainAt=std::chrono::steady_clock::time_point{};
+inline auto publishAt=std::chrono::steady_clock::time_point{};
+inline Protocol::Payload<jint> sentValues{};
+inline int sentActive=-1;
 inline auto retry=std::chrono::steady_clock::time_point{};
 inline std::vector<double> frameValues;
 inline auto renderLogAt=std::chrono::steady_clock::time_point{};
@@ -38,13 +42,26 @@ inline bool Load(JNIEnv* env) {
     shield=api.GetStaticMethodID(cls,"shieldClick","()Z");
     frame=api.GetStaticMethodID(cls,"hitFrame","()[D");
     drain=api.GetStaticMethodID(cls,"drainLogs","()Ljava/lang/String;");
-    if(!publish || !clear || !shield || !frame || !drain) return false;
+    status=api.GetStaticMethodID(cls,"coordinationStatus","()Ljava/lang/String;");
+    if(!publish || !clear || !shield || !frame || !drain || !status) return false;
+    // A DLL/JAR pair with different option layouts makes Java drop every publish silently.
+    auto options=SeedCracker::LoadExtensionClass(env,"phantomui.assist.AssistOptions");
+    if(!Check(env) || !options) return false;
+    const auto countField=api.GetStaticFieldID(options,"COUNT","I");
+    const jint javaCount=countField ? env->GetStaticIntField(options,countField) : -1;
+    if(!Check(env) || javaCount!=static_cast<jint>(Protocol::Count)) {
+        std::printf("[Assist] Bridge JAR option layout %d != DLL %zu: install DLL and JAR together (Build-Client.ps1 -Action install) and restart Minecraft.\n",
+            int(javaCount),Protocol::Count);
+        return false;
+    }
     bridge=static_cast<jclass>(env->NewGlobalRef(cls));
     if(Check(env) && bridge) { std::printf("[Assist] Bridge ready.\n");return true; }
     return false;
 }
 inline void Clear(JNIEnv* env,bool shutdown=false) {
     std::lock_guard lock(mutex);
+    sentActive=-1;
+    ActionStatus::Set({});
     if(env && bridge) {
         if(!env->ExceptionCheck()) { env->CallStaticVoidMethod(bridge,clear);Check(env); }
         if(shutdown) {env->DeleteGlobalRef(bridge);bridge=nullptr;}
@@ -53,17 +70,8 @@ inline void Clear(JNIEnv* env,bool shutdown=false) {
 inline void Publish(JNIEnv* env) {
     std::lock_guard lock(mutex);
     if(!env || env->ExceptionCheck()) return;
-    JniSafety::LocalFrame local(env,16);if(!local || !Load(env)) return;
     DWORD process=0;GetWindowThreadProcessId(GetForegroundWindow(),&process);
     bool active=!Menu_Enabled && process==GetCurrentProcessId();
-    int state=(PredictDoubleHand_Enabled?1:0)|(PredictDoubleHand_Logs?2:0)|(active?4:0);
-    if(state!=predictState) {
-        predictState=state;
-        if(PredictDoubleHand_Logs) std::printf("[PredictDoubleHand] Native enabled=%d diagnostics=%d running=%d (menu=%d foreground=%d)\n",
-            int(PredictDoubleHand_Enabled.load()),int(PredictDoubleHand_Logs.load()),int(active),int(Menu_Enabled.load()),int(process==GetCurrentProcessId()));
-    }
-    if(!active) {env->CallStaticVoidMethod(bridge,clear);Check(env);return;}
-    { PlayerFilter::AntiBot filter(env); }
     Protocol::Payload<jint> values{};
     values[Protocol::Index(Protocol::Option::AUTO_ARMOR)] = AutoArmor_Enabled.load();
     values[Protocol::Index(Protocol::Option::REFILL)] = Refill_Enabled.load();
@@ -91,10 +99,35 @@ inline void Publish(JNIEnv* env) {
     values[Protocol::Index(Protocol::Option::HIT_LOGS)] = HitEffect_Logs.load();
     values[Protocol::Index(Protocol::Option::CONFIRMED_ONLY)] = HitEffect_ConfirmedOnly.load();
     values[Protocol::Index(Protocol::Option::PARTICLE_SPREAD)] = HitEffect_Spread.load();
+    values[Protocol::Index(Protocol::Option::REFILL_TOTEMS)] = Refill_Totems.load();
+    values[Protocol::Index(Protocol::Option::TRIGGER_BOT)] = TriggerBot_Enabled.load();
+    values[Protocol::Index(Protocol::Option::TRIGGER_DELAY)] = TriggerBot_Delay.load();
+    values[Protocol::Index(Protocol::Option::TRIGGER_WEAPON)] = TriggerBot_OnlyWeapon.load();
+    auto stamp=std::chrono::steady_clock::now();
+    if(stamp<publishAt && int(active)==sentActive && values==sentValues) return; // unchanged: skip duplicate calls
+    JniSafety::LocalFrame local(env,16);if(!local || !Load(env)) return;
+    // Java tick() only runs on publish: active stays ~once per worker pass (5 ms), paused polls every 50 ms.
+    publishAt=stamp+std::chrono::milliseconds(active ? 4 : 50);
+    // Poll an immutable Java snapshot even while opening the menu pauses the modules.
+    auto report=static_cast<jstring>(env->CallStaticObjectMethod(bridge,status));
+    if(Check(env) && report) {
+        const char* chars=env->GetStringUTFChars(report,nullptr);
+        if(chars) { ActionStatus::Set(chars);env->ReleaseStringUTFChars(report,chars); }
+        Check(env);
+    }
+    int state=(PredictDoubleHand_Enabled?1:0)|(PredictDoubleHand_Logs?2:0)|(active?4:0);
+    if(state!=predictState) {
+        predictState=state;
+        if(PredictDoubleHand_Logs) std::printf("[PredictDoubleHand] Native enabled=%d diagnostics=%d running=%d (menu=%d foreground=%d)\n",
+            int(PredictDoubleHand_Enabled.load()),int(PredictDoubleHand_Logs.load()),int(active),int(Menu_Enabled.load()),int(process==GetCurrentProcessId()));
+    }
+    if(!active) {env->CallStaticVoidMethod(bridge,clear);Check(env);sentValues=values;sentActive=0;return;}
+    { PlayerFilter::AntiBot filter(env); }
     const auto count=static_cast<jsize>(values.size());
     auto array=env->NewIntArray(count);if(!Check(env) || !array) return;
     env->SetIntArrayRegion(array,0,count,values.data());if(!Check(env)) return;
     env->CallStaticVoidMethod(bridge,publish,array);if(!Check(env)) return;
+    sentValues=values;sentActive=1;
     auto now=std::chrono::steady_clock::now();
     if(now>=drainAt) {
         drainAt=now+std::chrono::milliseconds(500);
@@ -139,7 +172,7 @@ inline void Render() {
         if(p.w<=.001 || std::abs(p.x)>p.w || std::abs(p.y)>p.w) continue;
         ImVec2 center(float(vp->Pos.x+(p.x/p.w+1)*vp->Size.x*.5),float(vp->Pos.y+(1-p.y/p.w)*vp->Size.y*.5));
         float radius=std::clamp(float(m[i+4]*vp->Size.y/p.w),2.25f,7.5f)*size,alpha=std::clamp(float(m[i+3]),0.0f,1.0f);
-        if(glow>0) Menu::Widgets::DrawGlowCircle(draw,center,radius,Theme::Current().accent,alpha*glow,6);
+        if(glow>0) Menu::Widgets::DrawGlowCircle(draw,center,radius,Theme::Current().accent,alpha*glow,6,true);
         draw->AddCircleFilled(center,radius,Menu::Widgets::ColA(Theme::Current().accent,alpha),12);
         ++projected;
     }

@@ -1,7 +1,9 @@
+#include "../../utils/sdk/game_runtime.hpp"
 #include "CwCrystal.hpp"
 #include "../../utils/sdk/jni_safety.hpp"
 #include "../../utils/sdk/CMinecraft.h"
 #include "../../utils/lifecycle/lifecycle.hpp"
+#include "../settings.hpp"
 #include <Windows.h>
 #include <algorithm>
 #include <cmath>
@@ -29,7 +31,7 @@ void CwCrystal::Stop() {
 }
 
 jclass CwCrystal::FindGlobal(JNIEnv* env, const char* name) {
-        jclass local = env->FindClass(name);
+        jclass local = GameRuntime::FindClass(env,name);
         if (!local) {
             if(env->ExceptionCheck()) env->ExceptionClear();
             printf("[-] Class not found: %s\n", name);
@@ -159,8 +161,7 @@ void CwCrystal::TickLoop( ) {
         // Player
         jfieldID f_inventory = SafeGetField(c_ClientPlayerEntity, "inventory",
                                                "Lnet/minecraft/world/entity/player/Inventory;");
-        jmethodID m_swingHand = SafeGetMethod(c_ClientPlayerEntity, "swing",
-                                                 "(Lnet/minecraft/world/InteractionHand;)V");
+
 
         // Inventory
         jmethodID m_hasItem = SafeGetMethod(c_PlayerInventory, "hasAnyMatching",
@@ -234,7 +235,7 @@ void CwCrystal::TickLoop( ) {
                                                "()Lnet/minecraft/world/item/Item;");
 
 
-        if (!c_EntityHitResult || !c_EndCrystalEntity || !f_player || !f_level || !f_gameMode || !f_hitResult || !f_inventory || !f_items || !m_listSize || !m_listGet || !m_getItem || !END_CRYSTAL_ITEM || !m_getEntity || !m_attackEntity || !m_swingHand || !MAIN_HAND) {
+        if (!c_EntityHitResult || !c_EndCrystalEntity || !f_player || !f_level || !f_gameMode || !f_hitResult || !f_inventory || !f_items || !m_listSize || !m_listGet || !m_getItem || !END_CRYSTAL_ITEM || !m_getEntity || !m_attackEntity || !MAIN_HAND) {
             printf("[-] CwCrystal: Critical field IDs missing, aborting!\n");
 
             return;
@@ -242,6 +243,7 @@ void CwCrystal::TickLoop( ) {
 
         printf("[+] CwCrystal: Entering tick loop\n");
 
+        ULONGLONG lastAttack = 0;
         while (!Lifecycle::requested) {
             Sleep(5);
             std::lock_guard lock(m_tickMutex);
@@ -316,10 +318,14 @@ void CwCrystal::TickLoop( ) {
             if (env->IsInstanceOf(hitResult, c_EntityHitResult)) {
                 jobject entity = api.CallObjectMethod(hitResult, m_getEntity);
                 if (entity && env->IsInstanceOf(entity, c_EndCrystalEntity)) {
-                    if (gameMode)
-                        env->CallVoidMethod(gameMode, m_attackEntity, player, entity);
-                    if (!env->ExceptionCheck())
-                        env->CallVoidMethod(player, m_swingHand, MAIN_HAND);
+                    const int d = std::clamp(CW_Delay.load( ), 0, 4);
+                    if (!d || GetTickCount64( ) - lastAttack >= d * 50ULL) {
+                        if (gameMode)
+                            env->CallVoidMethod(gameMode, m_attackEntity, player, entity);
+                        if (!env->ExceptionCheck())
+                            p_mc->Swing(env,player);
+                        lastAttack = GetTickCount64( );
+                    }
                 }
                 if (entity)
                     env->DeleteLocalRef(entity);
@@ -345,7 +351,7 @@ void CwCrystal::TickLoop( ) {
 //                        bool accepted = env->CallBooleanMethod(result, m_isAccepted);
 //                        if (accepted) // ← shouldSwing weg, nur noch accepted prüfen
 //                            if (!env->ExceptionCheck())
-                        env->CallVoidMethod(player, m_swingHand, MAIN_HAND);
+                        p_mc->Swing(env,player);
 //                       env->DeleteLocalRef(result);
 //                    }
 //                }

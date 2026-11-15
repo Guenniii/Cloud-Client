@@ -1,4 +1,5 @@
 #include "widgets.hpp"
+#include "../modules/color_rgb.hpp"
 #include "palette.hpp"
 #include "../dependencies/imgui/imgui_internal.h"
 #include <cstdio>
@@ -7,6 +8,24 @@
 #include <unordered_map>
 
 namespace Menu::Widgets {
+void DrawColorRow(ImDrawList* draw,ImVec2 pos,float width,const char* label,std::atomic<int>* value,float alpha) {
+    if(!value)return;
+    ImGui::PushID(label);
+    draw->AddText(ImVec2(pos.x,pos.y+5),ColA(Menu::Palette::Label(),alpha),label);
+    int rgb=value->load();auto channels=ColorRGB::Unpack(rgb);
+    ImU32 color=IM_COL32((rgb>>16)&255,(rgb>>8)&255,rgb&255,255);
+    ImVec2 at(pos.x+width-112,pos.y),end(at.x+112,at.y+26);
+    draw->AddRectFilled(at,end,ColA(Menu::Palette::Background(),alpha),6);
+    draw->AddRect(at,end,ColA(Menu::Palette::Border(),alpha),6);
+    draw->AddRectFilled(ImVec2(at.x+7,at.y+5),ImVec2(at.x+25,at.y+21),ColA(color,alpha),4);
+    char text[12];std::snprintf(text,sizeof(text),"#%06X",rgb&0xFFFFFF);
+    draw->AddText(ImVec2(at.x+33,at.y+5),ColA(Menu::Palette::Text(),alpha),text);
+    ImGui::SetCursorScreenPos(at);
+    bool opened=ImGui::InvisibleButton("##color_swatch",ImVec2(112,26));
+    DrawCustomColorPopup(label,value,at,opened,alpha);
+    ImGui::PopID();
+}
+
 ImU32 ColA(ImU32 col, float mult) {
     ImVec4 c = ImGui::ColorConvertU32ToFloat4(col);
     c.w *= mult;
@@ -20,12 +39,13 @@ ImVec4 ColV(ImU32 col, float mult) {
 }
 
 // Nested translucent shapes approximate a soft halo without textures or a shader pass.
-void DrawGlowCircle(ImDrawList* draw_list, ImVec2 center, float radius, ImU32 color, float alpha, int layers) {
+void DrawGlowCircle(ImDrawList* draw_list, ImVec2 center, float radius, ImU32 color, float alpha, int layers, bool world) {
+    alpha *= world ? Theme::EspGlow() : Theme::MenuGlow();
     if (!draw_list || radius <= 0.0f || alpha <= 0.0f) return;
     const ImVec4 base = ImGui::ColorConvertU32ToFloat4(color);
     const int count = std::clamp(layers, 12, 20);
     const float spread = (std::max)(10.0f, radius * 0.9f);
-    const float peak = 0.32f * std::clamp(alpha, 0.0f, 1.0f) * base.w;
+    const float peak = 0.32f * std::clamp(alpha, 0.0f, 2.0f) * base.w;
     float previous = 0.0f;
     for (int i = count; i >= 1; --i) {
         const float t = static_cast<float>(i) / count;
@@ -37,11 +57,12 @@ void DrawGlowCircle(ImDrawList* draw_list, ImVec2 center, float radius, ImU32 co
     }
 }
 
-void DrawGlowRect(ImDrawList* draw_list, ImVec2 min, ImVec2 max, float rounding, ImU32 color, float alpha, int layers) {
+void DrawGlowRect(ImDrawList* draw_list, ImVec2 min, ImVec2 max, float rounding, ImU32 color, float alpha, int layers, bool world) {
+    alpha *= world ? Theme::EspGlow() : Theme::MenuGlow();
     if (!draw_list || max.x <= min.x || max.y <= min.y || alpha <= 0.0f) return;
     const ImVec4 base = ImGui::ColorConvertU32ToFloat4(color);
     const int count = std::clamp(layers, 12, 20);
-    const float peak = 0.18f * std::clamp(alpha, 0.0f, 1.0f) * base.w;
+    const float peak = 0.18f * std::clamp(alpha, 0.0f, 2.0f) * base.w;
     float previous = 0.0f;
     for (int i = count; i >= 1; --i) {
         const float t = static_cast<float>(i) / count;
@@ -151,14 +172,17 @@ bool DrawRoundedButton(ImDrawList* draw_list, const char* str_id, const char* la
 }
 
 void DrawCheckboxRow(ImDrawList* draw_list, ImVec2 pos, float width, const char* label, bool* v, float alpha) {
+    ImGui::PushID(label);
     draw_list->AddText(ImVec2(pos.x, pos.y + 5), ColA(Menu::Palette::Label(), alpha), label);
 
     float toggle_w = 34.0f, toggle_h = 19.0f;
     ImGui::SetCursorScreenPos(ImVec2(pos.x + width - toggle_w, pos.y - 2.0f));
     CustomToggle("##row_toggle", v, alpha, toggle_w, toggle_h);
+    ImGui::PopID();
 }
 
 void DrawSliderRow(ImDrawList* draw_list, ImVec2 pos, float width, const char* label, int* v, int vmin, int vmax, const char* suffix, float alpha) {
+    ImGui::PushID(label);
     draw_list->AddText(ImVec2(pos.x, pos.y), ColA(Menu::Palette::Label(), alpha), label);
 
     char val_buf[32];
@@ -201,11 +225,13 @@ void DrawSliderRow(ImDrawList* draw_list, ImVec2 pos, float width, const char* l
     draw_list->AddCircleFilled(handle, handle_radius, ColA(Menu::Palette::Accent(), alpha), 32);
     draw_list->AddCircleFilled(ImVec2(handle.x - 1.3f, handle.y - 1.5f), 1.5f,
         ColA(IM_COL32(255, 255, 255, 255), alpha * 0.25f), 16);
+    ImGui::PopID();
 }
 
 }
 
 namespace Menu::Widgets {
+
 bool CustomToggle(const char* label, std::atomic<bool>* value, float alpha, float width, float height) {
     bool local = value->load();
     bool changed = CustomToggle(label, &local, alpha, width, height);

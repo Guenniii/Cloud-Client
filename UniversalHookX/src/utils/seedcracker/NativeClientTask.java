@@ -3,7 +3,7 @@ package phantomui.seedcracker;
 import java.lang.reflect.Method;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-// Compiled into seedcracker_client_task_bytes.hpp; no native callbacks.
+// Compiled into the bridge JAR by client_build.py; no native callbacks.
 public final class NativeClientTask implements Runnable {
     private static NativeClientTask instance;
     private final Object minecraft;
@@ -24,7 +24,7 @@ public final class NativeClientTask implements Runnable {
         init = bridge.getMethod("initCracking");
         reset = bridge.getMethod("resetCracking");
         tick = bridge.getMethod("tickCracking");
-        scan = bridge.getMethod("scanChunkForConfirmedShipwrecks", int.class, int.class);
+        scan = bridge.getMethod("scanShipwreckStep", int.class, int.class);
     }
 
     public static synchronized void request(Class<?> bridge, boolean enabled) throws Exception {
@@ -70,7 +70,7 @@ public final class NativeClientTask implements Runnable {
             }
             tick.invoke(null);
             long now = System.nanoTime();
-            if (lastScan != 0 && now - lastScan < 1_000_000_000L) return;
+            if (lastScan != 0 && now - lastScan < 100_000_000L) return;
             lastScan = now;
             // Shipwreck data belongs to the Overworld only.
             Object dimension = world.getClass().getMethod("dimension").invoke(world);
@@ -82,8 +82,7 @@ public final class NativeClientTask implements Runnable {
             int cx = (int) Math.floor(x / 16.0);
             int cz = (int) Math.floor(z / 16.0);
             String hits = (String) scan.invoke(null, cx, cz);
-            int count = hits == null || hits.trim().isEmpty() ? 0 : hits.trim().split("\\R").length;
-            System.out.println("[SeedCracker] Scan Chunk " + cx + "," + cz + ": " + count + " bestaetigte Wracks");
+            if(hits!=null&&!hits.isEmpty())System.out.println("[SeedCracker] "+hits);
         } catch (Exception e) {
             System.err.println("[SeedCracker] Clientthread-Auftrag fehlgeschlagen:");
             e.printStackTrace();

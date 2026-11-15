@@ -62,6 +62,11 @@ namespace SeedCracker {
 
     CrackingStatus GetCrackingStatus(JNIEnv* env);
 
+    // Hash-verified world seeds for the current world. Empty when nothing is
+    // verified or when the world hash no longer matches the candidates.
+    std::vector<long long> GetVerifiedSeeds(JNIEnv* env);
+
+
     std::vector<ChestHit> ScanPlayerChunkForShipwreckCandidates(JNIEnv* env);
 
     std::vector<ChestHit> ScanChunkForShipwreckCandidates(JNIEnv* env, int chunkX, int chunkZ);

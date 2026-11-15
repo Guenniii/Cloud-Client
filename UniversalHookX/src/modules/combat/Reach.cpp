@@ -1,3 +1,4 @@
+#include "../../utils/sdk/game_runtime.hpp"
 #include "Reach.hpp"
 #include "../../utils/sdk/CMinecraft.h"
 #include "../../utils/lifecycle/lifecycle.hpp"
@@ -190,7 +191,7 @@ bool Reach::SetReachRaw(float value) {
     }
 
 jclass Reach::FindGlobal(JNIEnv* env, const char* name) {
-        jclass local = env->FindClass(name);
+        jclass local = GameRuntime::FindClass(env,name);
         if (!local) {
             env->ExceptionClear();
             return nullptr;
@@ -386,8 +387,8 @@ int Reach::SetReachByPlayerAttributes(JNIEnv* env, float value) {
             return 0;
         }
 
-        jclass c_attributes = env->FindClass("net/minecraft/world/entity/ai/attributes/Attributes");
-        jclass c_attribute_instance = env->FindClass("net/minecraft/world/entity/ai/attributes/AttributeInstance");
+        jclass c_attributes = GameRuntime::FindClass(env,"net/minecraft/world/entity/ai/attributes/Attributes");
+        jclass c_attribute_instance = GameRuntime::FindClass(env,"net/minecraft/world/entity/ai/attributes/AttributeInstance");
         if (!c_attributes || !c_attribute_instance) {
             env->ExceptionClear();
             env->DeleteLocalRef(player);

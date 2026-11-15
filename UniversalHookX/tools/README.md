@@ -8,7 +8,11 @@ DLL and bridge JAR remain separate files. Run from the native project directory:
 .\tools\Build-Client.ps1 -Action install
 ```
 
-Close Minecraft before installation. Building does not replace the files in `bin`.
+A successful build installs the DLL + JAR pair into `bin` right away (same checks,
+backup and rollback as `-Action install`), so the injector always finds a matching
+pair. If Minecraft still holds the files, the build is kept and reports
+`NOT INSTALLED`; close Minecraft and run `-Action install`. Use `-NoInstall` to
+build without touching `bin`.
 A successful build writes both artifacts, logs, source hashes and `manifest.json`
 to a unique directory under `obj/client-build`. Installation selects the latest
 successful build. A failed build never changes that selection.

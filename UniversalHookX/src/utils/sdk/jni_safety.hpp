@@ -1,6 +1,7 @@
 #pragma once
 #include "../../dependencies/jni/jni.h"
 #include <utility>
+#include "game_runtime.hpp"
 namespace JniSafety {
 template<class F> struct ScopeExit { F fn; ~ScopeExit() { fn(); } };
 class LocalFrame {
@@ -22,7 +23,7 @@ public:
     jstring NewStringUTF(const char* s) { return s?checked(e->NewStringUTF(s)):nullptr; }
     jobjectArray NewObjectArray(jsize n,jclass c,jobject o) { return c?checked(e->NewObjectArray(n,c,o)):nullptr; }
     template<class... A> jobject NewObject(jclass c,jmethodID m,A... args) { return c&&m?checked(e->NewObject(c,m,args...)):nullptr; }
-    jclass FindClass(const char* n) { return checked(e->FindClass(n)); }
+    jclass FindClass(const char* n) { return checked(GameRuntime::FindClass(e,n)); }
     jfieldID GetFieldID(jclass c,const char* n,const char* s) { return c?checked(e->GetFieldID(c,n,s)):nullptr; }
     jfieldID GetStaticFieldID(jclass c,const char* n,const char* s) { return c?checked(e->GetStaticFieldID(c,n,s)):nullptr; }
     jmethodID GetMethodID(jclass c,const char* n,const char* s) { return c?checked(e->GetMethodID(c,n,s)):nullptr; }

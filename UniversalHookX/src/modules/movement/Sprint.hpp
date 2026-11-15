@@ -3,6 +3,7 @@
 
 #include "../../dependencies/jni/jni.h"
 #include "../../utils/sdk/CMinecraft.h"
+#include <cstdio>
 #include <iostream>
 
 class AutoSprint {
@@ -10,6 +11,12 @@ public:
     static void Run(JNIEnv* env, CMinecraft* mc) {
         if (!env || !mc || !mc->IsInitialized( ))
             return;
+        // IsInitialized() does not cover these IDs; a null ID crashes the JVM.
+        if (!mc->f_input || !mc->f_move_vector || !mc->f_vec2_y || !mc->m_is_shifting || !mc->m_set_sprinting) {
+            static bool logged = false;
+            if (!logged) { std::printf("[-] AutoSprint: SDK-IDs fehlen, Modul inaktiv.\n"); logged = true; }
+            return;
+        }
 
         jobject mc_inst = mc->GetInstance( );
         jobject playerObj = env->GetObjectField(mc_inst, mc->f_player);
@@ -26,12 +33,12 @@ public:
 
                 // Sneaking Status abfragen
                 jboolean isSneaking = env->CallBooleanMethod(playerObj, mc->m_is_shifting);
+                if (env->ExceptionCheck()) { env->ExceptionClear(); isSneaking = JNI_TRUE; }
 
                 // Sprint aktivieren wenn der Spieler sich vorwärts bewegt und nicht sneakt
                 if (forwardImpulse > 0.0f && !isSneaking) {
-                    if (mc->m_set_sprinting) {
-                        env->CallVoidMethod(playerObj, mc->m_set_sprinting, JNI_TRUE);
-                    }
+                    env->CallVoidMethod(playerObj, mc->m_set_sprinting, JNI_TRUE);
+                    if (env->ExceptionCheck()) env->ExceptionClear();
                 }
                 env->DeleteLocalRef(moveVectorObj);
             }

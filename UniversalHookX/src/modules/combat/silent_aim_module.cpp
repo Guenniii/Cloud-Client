@@ -43,7 +43,7 @@ namespace {
             failStreak = 0;
             lockActive = false;
             SilentAim::reset(SilentAim::Owner::Standalone);
-            SilentAim::reset(SilentAim::Owner::HitCrystal);
+            SilentAim::reset(SilentAim::Owner::StandaloneHit);
         }
 
         static float NormalizeYaw(float yaw) {
@@ -216,8 +216,8 @@ namespace {
             }
             env->DeleteLocalRef(gameMode);
 
-            if (cmc->m_swing_arm && cmc->o_main_hand) {
-                env->CallVoidMethod(player, cmc->m_swing_arm, cmc->o_main_hand);
+            if (cmc->o_main_hand) {
+                cmc->Swing(env,player);
                 if (env->ExceptionCheck( ))
                     env->ExceptionClear( );
             }
@@ -380,8 +380,8 @@ namespace {
             AimHeadOnly(env, player, lockYaw);
 
             // 3) Angriff nur bei Linksklick + Cooldown
-            // AutoMace owns manual clicks while enabled; do not send a second attack.
-            if (AutoMace_Enabled || BreachSwap_Enabled || !(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
+            // AutoMace/BreachSwap/TriggerBot attack on their own; do not send a second attack.
+            if (AutoMace_Enabled || BreachSwap_Enabled || TriggerBot_Enabled || !(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
                 env->DeleteLocalRef(player);
                 return;
             }
@@ -402,7 +402,7 @@ namespace {
             hitReq.syncVisualHead = false; // Head bleibt ueber AimHeadOnly gesteuert
 
             float yaw = 0.f, pitch = 0.f;
-            if (!SilentAim::apply(env, mc, hitReq, SilentAim::Owner::HitCrystal, &yaw, &pitch)) {
+            if (!SilentAim::apply(env, mc, hitReq, SilentAim::Owner::StandaloneHit, &yaw, &pitch)) {
                 yaw = lockYaw;
                 pitch = lockPitch;
             }

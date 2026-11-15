@@ -8,6 +8,7 @@ namespace RuntimeModules {
     std::unique_ptr<ModuleBase> CreateHitEffect();
     std::unique_ptr<ModuleBase> CreatePredictDoubleHand();
     std::unique_ptr<ModuleBase> CreateShieldBreaker();
+    std::unique_ptr<ModuleBase> CreateTriggerBot();
     std::unique_ptr<ModuleBase> CreateFastPlace();
     std::unique_ptr<ModuleBase> CreateReach();
     std::unique_ptr<ModuleBase> CreateAutoTotem();

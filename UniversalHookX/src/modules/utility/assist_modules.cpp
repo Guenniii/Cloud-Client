@@ -15,3 +15,4 @@ std::unique_ptr<ModuleBase> RuntimeModules::CreateRefill() { return std::make_un
 std::unique_ptr<ModuleBase> RuntimeModules::CreateHitEffect() { return std::make_unique<AssistModule>("Hit Effect","Combat",HitEffect_Enabled); }
 std::unique_ptr<ModuleBase> RuntimeModules::CreatePredictDoubleHand() { return std::make_unique<AssistModule>("Predict Double Hand","Combat",PredictDoubleHand_Enabled); }
 std::unique_ptr<ModuleBase> RuntimeModules::CreateShieldBreaker() { return std::make_unique<AssistModule>("Auto Shield Breaker","Combat",ShieldBreaker_Enabled); }
+std::unique_ptr<ModuleBase> RuntimeModules::CreateTriggerBot() { return std::make_unique<AssistModule>("Trigger Bot","Combat",TriggerBot_Enabled); }

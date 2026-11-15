@@ -1,6 +1,7 @@
 #pragma once
 #include "seed_settings.hpp"
 #include "../seedcracker/seedcracker_bridge.hpp"
+#include "../seedcracker/seed_handoff.hpp"
 #include "../../modules/settings.hpp"
 #include "../../dependencies/imgui/imgui.h"
 #include <array>
@@ -65,6 +66,12 @@ inline bool Initialize(JNIEnv* env) {
     return Check(env) && bridge;
 }
 inline void Render() {
+    // Auto-apply runs here because seed state is render-thread only. Only an unambiguous
+    // result is applied; with several candidates the user picks one in the SeedCracker page.
+    if(SeedCracker_AutoApplySeed.load() && !SeedHandoff::HasApplied()) {
+        const auto candidates=SeedHandoff::Candidates();
+        if(candidates.size()==1) SeedHandoff::Apply(candidates.front());
+    }
     int mask=0;
     if(OreSim_Enabled) for(int i=0;i<10;++i) if(OreSim_Ores[i]) mask|=1<<i;
     if(!OreSim_Enabled && previousMask<=0) return;

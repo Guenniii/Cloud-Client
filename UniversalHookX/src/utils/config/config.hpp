@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include "settings_text.hpp"
 #include <atomic>
 #include <vector>
 #include "../../input/hotkey_state.hpp"
@@ -11,7 +12,8 @@
 // config.cpp ohne gegenseitige Abhaengigkeit darauf zugreifen koennen.
 // ==========================================
 enum class SettingType { Checkbox,
-                         SliderInt };
+                         SliderInt,
+                         ColorRGB };
 
 struct ModuleSetting {
     const char* name;
@@ -21,6 +23,8 @@ struct ModuleSetting {
     int i_min = 0;
     int i_max = 100;
     const char* suffix = ""; // z.B. "m", "%%", "ms"
+    const char* DisplayName() const {return SettingsText::English(name);}
+
 };
 
 struct ModuleData {
@@ -31,10 +35,22 @@ struct ModuleData {
     int category;
     std::vector<ModuleSetting> settings_list;
     Input::HotkeyMode hotkey_mode = Input::HotkeyMode::Toggle;
+    bool favorite = false;
 };
 
 namespace Config {
-    inline bool hud_enabled=true;
+    // Cards renamed after the 26.2 checkpoint; old profiles and share codes still load.
+    inline std::string CurrentModuleName(const std::string& module, const std::string& field) {
+        if (module == "KillAura") return "Auto Crystal";
+        if (module == "Speed") return field == "AutoSprint" ? "AutoSprint" : "FastPlace";
+        if (module == "NoFall") return "NoJumpDelay";
+        return module;
+    }
+    inline std::atomic<int> menu_size_percent{100};
+    inline std::atomic<int> font_size_percent{100};
+    inline bool hud_enabled=false;
+    inline bool watermark_enabled=true;
+    inline int watermark_x=-1,watermark_y=20; // -1 anchors the initial position to the right.
     inline int hud_x=20, hud_y=20;
     inline std::string active_profile;
     inline std::string profile_status;
@@ -43,6 +59,7 @@ namespace Config {
     // ---- Globale App-Settings (Settings-Tab) ----
     extern std::atomic<int> menu_keybind;        // Taste zum Oeffnen/Schliessen des Menues
     extern bool particles_enabled;  // Partikel-Hintergrund an/aus
+    inline int menu_style = 1;      // 0 = klassisches Menue, 1 = Click GUI (Standard), 2 = Orbit; nur Render-Thread
     extern std::atomic<bool> capturing_menu_key; // true waehrend auf einen neuen Menue-Hotkey gewartet wird
 
     // ---- Config-Datei-Verwaltung (Config-Tab) ----
@@ -55,6 +72,8 @@ namespace Config {
 
     // Speichert den aktuellen Zustand (Module + App-Settings) unter dem angegebenen Namen.
     void Save(const std::string& name, ModuleData* modules, int module_count);
+
+    bool SaveNewProfile(const std::string& name, ModuleData* modules, int module_count, bool includeSeed = true);
 
     // Laedt eine gespeicherte Config und wendet sie auf Module + App-Settings an.
     void Load(const std::string& name, ModuleData* modules, int module_count);

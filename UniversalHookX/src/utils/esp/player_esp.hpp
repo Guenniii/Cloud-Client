@@ -59,7 +59,7 @@ inline void Render() {
         auto skinData=static_cast<jdoubleArray>(env->CallStaticObjectMethod(skinBridge,skinFrame,PlayerESP_Range.load(), static_cast<jboolean>(AntiBot_Enabled.load())));
         if(!Check(env) || !skinData) return;
         auto length=env->GetArrayLength(skinData);
-        if(length<19 || length>19+60000*13 || (length-19)%13) return;
+        if(length<19 || length>19+60000*14 || (length-19)%14) return;
         skinFrameValues.resize(length);
         auto& skinValues=skinFrameValues;
         env->GetDoubleArrayRegion(skinData,0,length,skinValues.data());
@@ -72,7 +72,7 @@ inline void Render() {
     if (!Check(env) || !data) return;
     error.clear();
     const jsize count=env->GetArrayLength(data);
-    if (count<19 || count>19+256*6 || (count-19)%6) return;
+    if (count<19 || count>19+256*7 || (count-19)%7) return;
     frameValues.resize(count);
     auto& values=frameValues;
     env->GetDoubleArrayRegion(data,0,count,values.data());
@@ -81,7 +81,7 @@ inline void Render() {
     constexpr int edges[][2]={{0,1},{2,3},{4,5},{6,7},{0,2},{1,3},{4,6},{5,7},{0,4},{1,5},{2,6},{3,7}};
     const float thickness=static_cast<float>(std::clamp(PlayerESP_LineWidth.load(),1,4));
     draw->PushClipRect(vp->Pos,ImVec2(vp->Pos.x+vp->Size.x,vp->Pos.y+vp->Size.y),true);
-    for (int i=19;i<count;i+=6) {
+    for (int i=19;i<count;i+=7) {
         bool finite=true;
         for(int k=0;k<6;++k) finite &= std::isfinite(values[i+k]);
         if(!finite || values[i]>values[i+3] || values[i+1]>values[i+4] || values[i+2]>values[i+5]) continue;
@@ -93,9 +93,10 @@ inline void Render() {
             if(!OreSim::Clip(a,b)) continue;
             auto screen=[&](OreSim::Point p){return ImVec2(float(vp->Pos.x+(p.x/p.w+1)*vp->Size.x*.5),float(vp->Pos.y+(1-p.y/p.w)*vp->Size.y*.5));};
             auto p=screen(a), q=screen(b);
-            if(PlayerESP_Glow) EspGlow::Line(draw,p,q,thickness);
+            auto color=Theme::PlayerColor(values[i+6]!=0,Friends_Color.load());
+            if(PlayerESP_Glow) EspGlow::Line(draw,p,q,thickness,1.f,color);
             draw->AddLine(p,q,IM_COL32(15,10,30,180),thickness+2);
-            draw->AddLine(p,q,Theme::Current().accent,thickness);
+            draw->AddLine(p,q,color,thickness);
         }
     }
     draw->PopClipRect();

@@ -30,10 +30,10 @@ inline int ClipPolygon(Point* polygon, int size) {
     return size;
 }
 inline void Draw(ImDrawList* draw, ImGuiViewport* vp, const std::vector<double>& data) {
-    if(data.size()<19 || data.size()>19+60000*13 || (data.size()-19)%13) return;
+    if(data.size()<19 || data.size()>19+60000*14 || (data.size()-19)%14) return;
     struct Quad {Point p[4]; ImU32 color; double depth;};
-    std::vector<Quad> quads; quads.reserve((data.size()-19)/13);
-    for(size_t i=19;i<data.size();i+=13) {
+    std::vector<Quad> quads; quads.reserve((data.size()-19)/14);
+    for(size_t i=19;i<data.size();i+=14) {
         Quad q{}; bool valid=true;
         for(int k=0;k<4;++k) {
             q.p[k]=OreSim::Project(data.data(),data[i+k*3],data[i+k*3+1],data[i+k*3+2]);
@@ -43,7 +43,11 @@ inline void Draw(ImDrawList* draw, ImGuiViewport* vp, const std::vector<double>&
         double color=data[i+12];
         if(!valid || !std::isfinite(color) || color<0 || color>4294967295.0) continue;
         auto argb=static_cast<unsigned int>(color);
-        q.color=Theme::SkinTint(IM_COL32((argb>>16)&255,(argb>>8)&255,argb&255,(argb>>24)&255));
+        if(data[i+13]!=0) {
+            const auto tint=ImGui::ColorConvertU32ToFloat4(Theme::PlayerColor(true,Friends_Color.load()));
+            const int rgb=(static_cast<int>(tint.x*255+.5f)<<16)|(static_cast<int>(tint.y*255+.5f)<<8)|static_cast<int>(tint.z*255+.5f);
+            q.color=IM_COL32((((argb>>16)&255)*3+((rgb>>16)&255)*2)/5,(((argb>>8)&255)*3+((rgb>>8)&255)*2)/5,((argb&255)*3+(rgb&255)*2)/5,(argb>>24)&255);
+        } else q.color=Theme::SkinTint(IM_COL32((argb>>16)&255,(argb>>8)&255,argb&255,(argb>>24)&255));
         quads.push_back(q);
     }
     std::stable_sort(quads.begin(),quads.end(),[](const Quad& a,const Quad& b){return a.depth>b.depth;});

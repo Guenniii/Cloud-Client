@@ -31,7 +31,11 @@ enum class Option : std::size_t {
     HIT_LOGS = 23,
     CONFIRMED_ONLY = 24,
     PARTICLE_SPREAD = 25,
-    COUNT = 26
+    REFILL_TOTEMS = 26,
+    TRIGGER_BOT = 27,
+    TRIGGER_DELAY = 28,
+    TRIGGER_WEAPON = 29,
+    COUNT = 30
 };
 inline constexpr std::size_t Count = static_cast<std::size_t>(Option::COUNT);
 constexpr std::size_t Index(Option option) { return static_cast<std::size_t>(option); }

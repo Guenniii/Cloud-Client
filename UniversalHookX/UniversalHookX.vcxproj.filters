@@ -25,9 +25,14 @@
     <ClCompile Include="src\menu\resources.cpp" />
     <ClCompile Include="src\menu\module_registry.cpp" />
     <ClCompile Include="src\menu\widgets.cpp" />
+    <ClCompile Include="src\menu\clickgui.cpp" />
+    <ClCompile Include="src\menu\orbit.cpp" />
+    <ClCompile Include="src\menu\pages\friends_page.cpp" />
+    <ClCompile Include="src\menu\custom_color_picker.cpp" />
     <ClCompile Include="src\menu\key_names.cpp" />
     <ClCompile Include="src\menu\pages\config_page.cpp" />
     <ClCompile Include="src\menu\pages\settings_page.cpp" />
+    <ClCompile Include="src\menu\pages\theme_page.cpp" />
     <ClCompile Include="src\menu\pages\seedcracker_page.cpp" />
     <ClCompile Include="src\console\console.cpp" />
     <ClCompile Include="src\utils\utils.cpp" />
@@ -70,6 +75,11 @@
     <ClInclude Include="src\input\auto_tool.hpp" />
     <ClInclude Include="src\input\utility_suite.hpp" />
     <ClInclude Include="src\input\assist_options.hpp" />
+    <ClInclude Include="src\input\action_status.hpp" />
+    <ClInclude Include="src\input\friend_names.hpp" />
+    <ClInclude Include="src\input\friends.hpp" />
+    <ClInclude Include="src\input\visual_modules.hpp" />
+    <ClInclude Include="src\modules\color_rgb.hpp" />
     <ClInclude Include="src\utils\esp\glow.hpp" />
     <ClInclude Include="src\menu\login.hpp" />
     <ClInclude Include="src\input\key_mapping.hpp" />
@@ -77,6 +87,10 @@
     <ClInclude Include="src\menu\module_registry.hpp" />
     <ClInclude Include="src\menu\palette.hpp" />
     <ClInclude Include="src\menu\widgets.hpp" />
+    <ClInclude Include="src\menu\clickgui.hpp" />
+    <ClInclude Include="src\menu\orbit.hpp" />
+    <ClInclude Include="src\menu\fonts\orbit_fonts.h" />
+    <ClInclude Include="src\menu\module_view.hpp" />
     <ClInclude Include="src\menu\key_names.hpp" />
     <ClInclude Include="src\menu\pages.hpp" />
     <ClInclude Include="src\hooks\hooks.hpp" />
@@ -137,6 +151,7 @@
     <ClInclude Include="src\utils\sdk\CFabric.h" />
     <ClInclude Include="src\utils\config\config.hpp" />
     <ClInclude Include="src\utils\seedcracker\seedcracker_bridge.hpp" />
+    <ClInclude Include="src\utils\seedcracker\seed_handoff.hpp" />
   </ItemGroup>
   <ItemGroup>
     <Library Include="src\dependencies\jni\jvm.lib" />

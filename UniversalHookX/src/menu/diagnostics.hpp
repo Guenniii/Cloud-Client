@@ -39,7 +39,7 @@ inline std::string Report() {
     out << "\nRuntime features (1=enabled):\n";
     struct Entry { const char* name; std::atomic<bool>* value; };
     const Entry entries[]={
-        {"Auto Armor",&AutoArmor_Enabled},{"Refill",&Refill_Enabled},{"Hit Effect",&HitEffect_Enabled},{"Predict Double Hand",&PredictDoubleHand_Enabled},{"Auto Shield Breaker",&ShieldBreaker_Enabled},
+        {"Auto Armor",&AutoArmor_Enabled},{"Refill",&Refill_Enabled},{"Hit Effect",&HitEffect_Enabled},{"Predict Double Hand",&PredictDoubleHand_Enabled},{"Auto Shield Breaker",&ShieldBreaker_Enabled},{"Trigger Bot",&TriggerBot_Enabled},
         {"CW",&CW_Enabled},{"Reach",&Reach_Enabled},{"FastPlace",&FastPlace_Enabled},
         {"AutoSprint",&AutoSprint_Enabled},{"NoJumpDelay",&NoJumpDelay_Enabled},
         {"AutoTotem",&AutoTotem_Enabled},{"HitCrystal",&HitCrystal_Enabled},

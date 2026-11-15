@@ -39,7 +39,8 @@ def source_hashes(project, java_root):
     files = [p for p in (project / 'src').rglob('*') if p.suffix in ('.cpp', '.hpp', '.h')]
     files += [project / 'UniversalHookX.vcxproj', project / 'UniversalHookX.vcxproj.filters']
     files += list((java_root / 'src/main/java').rglob('*.java'))
-    files += [java_root / 'gradle.properties']
+    files += [java_root / 'gradle.properties', project / 'src/utils/seedcracker/NativeClientTask.java']
+    files += [project / 'tools' / name for name in ('client_build.py','java_compat.py','compat263_NoDepthLayer.java')]
     return {str(p.resolve()): digest(p) for p in files if p.is_file()}
 
 def run(command, log, **kwargs):
@@ -82,6 +83,7 @@ def compile_java(java_root, base_jar, cache, output):
     classes = output / 'classes'
     classes.mkdir()
     sources = sorted((java_root / 'src/main/java').rglob('*.java'))
+    sources += [PROJECT / 'src/utils/seedcracker/NativeClientTask.java']
     if not sources:
         raise RuntimeError('No Java sources found.')
     args = output / 'javac.args'
@@ -212,6 +214,7 @@ def main():
     parser.add_argument('--vcvars', type=Path)
     parser.add_argument('--vulkan', type=Path)
     parser.add_argument('--dry-run', action='store_true')
+    parser.add_argument('--no-install', action='store_true', help='build only; leave bin/ unchanged')
     args = parser.parse_args();project=args.project.resolve();java_root=args.java_root.resolve()
     output = (args.output or project / 'obj/client-build').resolve()
     latest = project / 'obj/client-build/latest.json'
@@ -229,17 +232,28 @@ def main():
     base_hash = digest(base_jar)
     print('Building both artifacts in ' + str(output), flush=True)
     cp = compile_java(java_root, base_jar, args.cache.resolve(), output)
+    import java_compat
+    compatibility = java_compat.build(java_root, cp, output, output / "SeedCrackerBridge.jar")
     vulkan = args.vulkan or (Path(os.environ['VULKAN_SDK']) if 'VULKAN_SDK' in os.environ else next(iter(sorted(Path('C:/VulkanSDK').glob('*'), reverse=True)), Path('missing')))
     compile_native(project, output, (args.vcvars or find_vcvars()).resolve(), vulkan.resolve())
     if hashes != source_hashes(project, java_root) or base_hash != digest(base_jar):
         raise RuntimeError('Inputs changed during build; no ready manifest generated.')
     manifest = {'built_at':datetime.datetime.now().isoformat(),'configuration':'Release|x64',
         'java_root':str(java_root), 'minecraft':properties(java_root / 'gradle.properties')['minecraft_version'],
-        'bootstrap_jar':{'path':str(base_jar),'sha256':base_hash}, 'sources':hashes, 'classpath':cp,
+        'bootstrap_jar':{'path':str(base_jar),'sha256':base_hash}, 'sources':hashes, 'classpath':cp, 'compatibility':compatibility,
         'artifacts':{name:digest(output / name) for name in NAMES}}
     (output / 'manifest.json').write_text(json.dumps(manifest, indent=2))
     latest.parent.mkdir(parents=True,exist_ok=True);latest.write_text(json.dumps({'output':str(output)},indent=2))
-    print('READY: two separate artifacts. Install with Build-Client.ps1 -Action install.', flush=True)
+    print('READY: two separate artifacts.', flush=True)
+    if args.no_install:
+        print('Not installed (--no-install). Install with Build-Client.ps1 -Action install.', flush=True)
+        return
+    # Keep bin/ (used by the injector) on the matching DLL + JAR pair after every build.
+    try:
+        install(project, output)
+    except OSError as error:
+        print('NOT INSTALLED: ' + str(error), flush=True)
+        print('Build is kept; close Minecraft and run Build-Client.ps1 -Action install.', flush=True)
 
 if __name__ == '__main__':
     try:

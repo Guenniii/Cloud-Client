@@ -17,10 +17,7 @@ private:
         if (!g_sword_obsidian) {
             g_sword_obsidian = std::make_unique<HitCrystal>(p_jni->GetJVM( ), p_jni->p_cminecraft.get( ));
         }
-
-        if (GetAsyncKeyState(VK_RBUTTON) & 0x8000) {
-            g_sword_obsidian->Run( );
-        }
+        g_sword_obsidian->Start( );
     }
     }
 };

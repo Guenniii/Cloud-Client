@@ -5,6 +5,7 @@
 #include <Windows.h>
 #include <cstdio>
 #include "../../utils/seedcracker/seedcracker_bridge.hpp"
+#include "../../utils/seedcracker/seed_handoff.hpp"
 
 namespace {
 class SeedCrackerModule final : public RuntimeModule {
@@ -35,6 +36,9 @@ private:
             std::printf("[SeedCracker] Modul deaktiviert – Daten bleiben erhalten "
                         "(Reset nur ueber Panel-Button).\n");
             seedcracker_was_enabled = false;
+            // The collected seeds belong to the world that was scanned. Without
+            // a running cracker they must not be applied to a new world.
+            SeedHandoff::Clear();
         }
         return;
     }
@@ -68,6 +72,10 @@ private:
         }
         seedcracker_was_enabled = true;
     }
+
+    // Pick up verified seeds; OreSim::Render applies them on the render thread,
+    // which owns the OreSim seed state.
+    SeedHandoff::Poll(env);
     }
 };
 }

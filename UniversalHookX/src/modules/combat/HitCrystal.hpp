@@ -1,5 +1,7 @@
 #pragma once
 #include "../../dependencies/jni/jni.h"
+#include <Windows.h>
+#include <atomic>
 
 class CMinecraft;
 
@@ -7,8 +9,13 @@ class HitCrystal final {
 public:
     HitCrystal(JavaVM* jvm, CMinecraft* mc);
 
-    void Run( );
+    void Start( );
 private:
+    void Loop( );
+    void Run(JNIEnv* env, jobject mc_inst);
+    bool Allowed(JNIEnv* env, jobject mc);
+    bool Wait(JNIEnv* env, jobject mc, DWORD ms);
+
     struct Vector3d {
         double x;
         double y;
@@ -16,7 +23,7 @@ private:
     };
 
     // Hilfsfunktion: Berechnet die Winkel und wendet den Silent Aim an
-    void ApplySilentAim(JNIEnv* env, jobject mc_inst, jobject player, Vector3d targetPos);
+    bool ApplySilentAim(JNIEnv* env, jobject mc_inst, jobject player, Vector3d targetPos);
 
     // Hilfsfunktion: Sucht das nächste Crystal-Entity aus der Welt
     jobject FindNearestCrystalEntity(JNIEnv* env, jobject mc_inst, jobject player);
@@ -46,4 +53,6 @@ private:
 private:
     JavaVM* p_jvm;
     CMinecraft* p_mc;
+    std::atomic<bool> m_started{false};
+    ULONGLONG m_lastLog = 0;
 };

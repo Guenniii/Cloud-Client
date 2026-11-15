@@ -1,16 +1,13 @@
 #include "../pages.hpp"
-#include "../performance.hpp"
-#include "../diagnostics.hpp"
-#include "../module_registry.hpp"
 #include "../widgets.hpp"
 #include "../palette.hpp"
 #include "../../dependencies/imgui/imgui_internal.h"
 #include <cstdio>
 #include "../../base.hpp"
 #include "../../utils/config/config.hpp"
+#include "../../utils/sdk/game_runtime.hpp"
 #include "../../modules/settings.hpp"
 #include "../key_names.hpp"
-#include "../../input/key_mapping.hpp"
 
 namespace Menu::Pages {
 using namespace Menu::Widgets;
@@ -22,8 +19,9 @@ void DrawSettingsPage(ImDrawList* draw_list, ImVec2 area_min, float area_w, floa
     draw_list->AddRect(area_min, area_max, ColA(Menu::Palette::Border(), alpha), 12.0f, 0, 1.0f);
 
     ImGui::SetCursorScreenPos(area_min);
-    ImGui::BeginChild("SettingsContent",ImVec2(area_w,area_h),false,ImGuiWindowFlags_NoScrollbar);
+    ImGui::BeginChild("SettingsContent",ImVec2(area_w,area_h),false,ImGuiWindowFlags_AlwaysVerticalScrollbar);
     area_min=ImGui::GetCursorScreenPos();
+    area_w=ImGui::GetContentRegionAvail().x;
     area_max=ImVec2(area_min.x+area_w,area_min.y+area_h);
     draw_list=ImGui::GetWindowDrawList();
     draw_list->AddText(ImVec2(area_min.x + 20, area_min.y + 18), ColA(Menu::Palette::Text(), alpha), "Settings");
@@ -64,39 +62,52 @@ void DrawSettingsPage(ImDrawList* draw_list, ImVec2 area_min, float area_w, floa
     ImGui::SetCursorScreenPos(ImVec2(area_min.x + 20 + row_w - tw, row_y + 2.0f));
     CustomToggle("##settings_particles", &Config::particles_enabled, alpha, tw, th);
 
-    row_y += 68.0f;
-    draw_list->AddLine(ImVec2(area_min.x+20,row_y-8), ImVec2(area_max.x-20,row_y-8), ColA(Menu::Palette::Border(),alpha));
-    draw_list->AddText(ImVec2(area_min.x+20,row_y), ColA(Menu::Palette::Label(),alpha), "Color Theme");
-    const float themeWidth=(row_w-20.0f)/3.0f;
-    for(int t=0;t<3;++t) {
-        const auto& palette=Theme::presets[t];
-        ImGui::PushID(t);
-        ImVec2 pos(area_min.x+20+t*(themeWidth+10),row_y+26);
-        ImVec2 end(pos.x+themeWidth,pos.y+66);
-        ImGui::SetCursorScreenPos(pos);
-        if(ImGui::InvisibleButton("##theme",ImVec2(themeWidth,66))) Theme::selected=t;
-        bool active=Theme::selected==t;
-        draw_list->AddRectFilled(pos,end,ColA(palette.background,alpha),9);
-        draw_list->AddRect(pos,end,ColA(active?palette.accent:palette.border,alpha),9,0,active?2.0f:1.0f);
-        draw_list->AddText(ImVec2(pos.x+12,pos.y+10),ColA(palette.text,alpha),palette.name);
-        for(int swatch=0;swatch<3;++swatch) {
-            ImU32 color=swatch==0?palette.accent:swatch==1?palette.soft:palette.card;
-            draw_list->AddCircleFilled(ImVec2(pos.x+18+swatch*21,pos.y+45),6,ColA(color,alpha));
+    // --- Menu style (this page is shared by all three menus; the change takes effect next frame) ---
+    row_y += 64.0f;
+    draw_list->AddText(ImVec2(area_min.x + 20, row_y + 3), ColA(Menu::Palette::Label(), alpha), "Menu style");
+    {
+        const char* style_names[3] = {"Classic", "Click GUI", "Orbit"};
+        float seg_w[3], total_w = 4.0f;
+        for (int i = 0; i < 3; ++i) { seg_w[i] = ImGui::CalcTextSize(style_names[i]).x + 18.0f; total_w += seg_w[i]; }
+        const ImVec2 smin(area_min.x + 20 + row_w - total_w, row_y - 2.0f), smax(smin.x + total_w, smin.y + 28.0f);
+        // narrow areas (Orbit at 80 %): drop the description instead of running under the control
+        const char* style_desc = "Saved in your profile.";
+        if (area_min.x + 20 + ImGui::CalcTextSize(style_desc).x + 10.0f < smin.x)
+            draw_list->AddText(ImVec2(area_min.x + 20, row_y + 20), ColA(Menu::Palette::Muted(), alpha), style_desc);
+        draw_list->AddRectFilled(smin, smax, ColA(Menu::Palette::Background(), alpha), 8.0f);
+        draw_list->AddRect(smin, smax, ColA(Menu::Palette::Border(), alpha), 8.0f);
+        float sx = smin.x + 2.0f;
+        for (int i = 0; i < 3; ++i) {
+            ImGui::SetCursorScreenPos(ImVec2(sx, smin.y + 2.0f));
+            ImGui::PushID(i);
+            if (ImGui::InvisibleButton("##menu_style", ImVec2(seg_w[i], 24.0f))) Config::menu_style = i;
+            const bool hovered = ImGui::IsItemHovered();
+            ImGui::PopID();
+            const bool active = Config::menu_style == i;
+            if (active || hovered)
+                draw_list->AddRectFilled(ImVec2(sx, smin.y + 2.0f), ImVec2(sx + seg_w[i], smin.y + 26.0f), ColA(Menu::Palette::Soft(), alpha * (active ? 1.0f : 0.5f)), 6.0f);
+            draw_list->AddText(ImVec2(sx + 9.0f, smin.y + 5.0f), ColA(active ? Menu::Palette::Accent() : Menu::Palette::Label(), alpha), style_names[i]);
+            sx += seg_w[i];
         }
-        if(active) draw_list->AddCircleFilled(ImVec2(end.x-14,pos.y+45),3,ColA(palette.accent,alpha));
-        ImGui::PopID();
     }
 
-    const float unloadY=row_y+112.0f;
+    row_y += 64.0f;
+    draw_list->AddText(ImVec2(area_min.x + 20, row_y), ColA(Menu::Palette::Label(), alpha), "Interface size");
+    draw_list->AddText(ImVec2(area_min.x + 20, row_y + 22), ColA(Menu::Palette::Muted(), alpha), "Menu dimensions and text size are saved in your profile.");
+    row_y += 46.0f;
+    DrawSliderRow(draw_list, ImVec2(area_min.x + 20, row_y), row_w, "Menu size", &Config::menu_size_percent, 80, 120, "%", alpha);
+    row_y += 54.0f;
+    DrawSliderRow(draw_list, ImVec2(area_min.x + 20, row_y), row_w, "Text size", &Config::font_size_percent, 90, 115, "%", alpha);
+    const float unloadY=row_y+76.0f;
     draw_list->AddLine(ImVec2(area_min.x+20,unloadY-10),ImVec2(area_min.x+area_w-20,unloadY-10),ColA(Menu::Palette::Border(),alpha));
     draw_list->AddText(ImVec2(area_min.x+20,unloadY),ColA(Menu::Palette::Label(),alpha),"Unload Client");
-    draw_list->AddText(ImVec2(area_min.x+20,unloadY+23),ColA(Menu::Palette::Muted(),alpha),"Hotkey: Ende");
+    draw_list->AddText(ImVec2(area_min.x+20,unloadY+23),ColA(Menu::Palette::Muted(),alpha),"Hotkey: End");
     ImGui::SetCursorScreenPos(ImVec2(area_min.x+area_w-170,unloadY));
     if(DrawRoundedButton(draw_list,"##unload_client","Unload DLL",ImVec2(150,36),
         Menu::Palette::Soft(),Theme::Current().border,Menu::Palette::Accent(),alpha,8)) Base::Unload();
     float hudY=unloadY+70;
     draw_list->AddLine(ImVec2(area_min.x+20,hudY),ImVec2(area_max.x-20,hudY),ColA(Menu::Palette::Border(),alpha));
-    draw_list->AddText(ImVec2(area_min.x+20,hudY+16),ColA(Menu::Palette::Label(),alpha),"Status HUD");
+    draw_list->AddText(ImVec2(area_min.x+20,hudY+16),ColA(Menu::Palette::Label(),alpha),"Info HUD");
     draw_list->AddText(ImVec2(area_min.x+20,hudY+39),ColA(Menu::Palette::Muted(),alpha),"Drag its header while the menu is open. Position is saved in profiles.");
     ImGui::SetCursorScreenPos(ImVec2(area_max.x-160,hudY+10));
     if(DrawRoundedButton(draw_list,"##reset_hud","Reset",ImVec2(80,28),Menu::Palette::Soft(),Menu::Palette::Border(),Menu::Palette::Accent(),alpha,6)) {
@@ -104,67 +115,29 @@ void DrawSettingsPage(ImDrawList* draw_list, ImVec2 area_min, float area_w, floa
     }
     ImGui::SetCursorScreenPos(ImVec2(area_max.x-58,hudY+14));
     CustomToggle("##hud_enabled",&Config::hud_enabled,alpha,38,21);
-    float hotkeyY=hudY+76;
-    draw_list->AddLine(ImVec2(area_min.x+20,hotkeyY),ImVec2(area_max.x-20,hotkeyY),ColA(Menu::Palette::Border(),alpha));
-    draw_list->AddText(ImVec2(area_min.x+20,hotkeyY+16),ColA(Menu::Palette::Text(),alpha),"Module Hotkeys");
-    draw_list->AddText(ImVec2(area_min.x+20,hotkeyY+38),ColA(Menu::Palette::Muted(),alpha),"Esc: cancel | Backspace: clear | End: reserved for unload");
-    hotkeyY+=68;
-    auto modules=Registry::GetModules();
-    for (int i=0;i<static_cast<int>(modules.size());++i) {
-        auto& module=modules[i];
-        ImGui::PushID(i);
-        bool conflict=Registry::HasConflict(module.hotkey,i);
-        draw_list->AddText(ImVec2(area_min.x+20,hotkeyY+8),ColA(Menu::Palette::Label(),alpha),module.name);
-        if (conflict) draw_list->AddText(ImVec2(area_min.x+20,hotkeyY+29),ColA(Menu::Palette::Accent(),alpha),"Key conflict");
-        float x=area_max.x-304;
-        auto button=[&](const char* id,const char* label,float width) {
-            ImGui::SetCursorScreenPos(ImVec2(x,hotkeyY));
-            bool clicked=DrawRoundedButton(draw_list,id,label,ImVec2(width,30),Menu::Palette::Soft(),Menu::Palette::Border(),Menu::Palette::Accent(),alpha,6);
-            x+=width+8;
-            return clicked;
-        };
-        std::string label=Config::capturing_module_key==i ? "Press key..." : module.hotkey ? GetKeyName(module.hotkey) : "Set key";
-        if (button("key",label.c_str(),104)) {
-            Config::capturing_menu_key=false;
-            Config::capturing_module_key=Config::capturing_module_key==i ? -1 : i;
-        }
-        if (module.enabled==&ShortWindCharge_Enabled || module.enabled==&AutoPearlCatch_Enabled) {
-            button("mode","Action",80);
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Enable the module, then press its key once per action. Holding does not repeat.");
-        } else {
-            if (button("mode",module.hotkey_mode==Input::HotkeyMode::Toggle ? "Toggle" : "Hold",80))
-                module.hotkey_mode=module.hotkey_mode==Input::HotkeyMode::Toggle ? Input::HotkeyMode::Hold : Input::HotkeyMode::Toggle;
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Hold temporarily enables the module; release restores its previous state.");
-        }
-        if (button("clear","Clear",64)) { module.hotkey=0; if(Config::capturing_module_key==i) Config::capturing_module_key=-1; }
-        hotkeyY+=56;
-        ImGui::PopID();
+    const float watermarkY=hudY+76;
+    draw_list->AddLine(ImVec2(area_min.x+20,watermarkY),ImVec2(area_max.x-20,watermarkY),ColA(Menu::Palette::Border(),alpha));
+    draw_list->AddText(ImVec2(area_min.x+20,watermarkY+16),ColA(Menu::Palette::Label(),alpha),"Logo watermark");
+    draw_list->AddText(ImVec2(area_min.x+20,watermarkY+39),ColA(Menu::Palette::Muted(),alpha),"Logo only. Drag it while the menu is open.");
+    ImGui::SetCursorScreenPos(ImVec2(area_max.x-160,watermarkY+10));
+    if(DrawRoundedButton(draw_list,"##reset_watermark","Reset",ImVec2(80,28),Menu::Palette::Soft(),Menu::Palette::Border(),Menu::Palette::Accent(),alpha,6)) {
+        Config::watermark_x=-1;Config::watermark_y=20;
     }
-    draw_list->AddLine(ImVec2(area_min.x+20,hotkeyY),ImVec2(area_max.x-20,hotkeyY),ColA(Menu::Palette::Border(),alpha));
-    ImGui::SetCursorScreenPos(ImVec2(area_min.x+20,hotkeyY+16));
-    ImGui::TextUnformatted("Performance / Diagnostics");
-    ImGui::SetCursorScreenPos(ImVec2(area_min.x+20,hotkeyY+42));
-    ImGui::TextDisabled("CPU preparation only; excludes GPU and background cracking.");
-    const char* labels[]={"Client total", "OreSim", "Player ESP"};
-    for(int i=0;i<Performance::Count;++i) {
-        const auto stats=Performance::samples[i].Read();
-        ImGui::SetCursorScreenPos(ImVec2(area_min.x+20,hotkeyY+68+i*24));
-        ImGui::Text("%s: %.3f ms avg / %.3f ms peak",labels[i],stats.average,stats.peak);
-    }
-    ImGui::SetCursorScreenPos(ImVec2(area_min.x+20,hotkeyY+146));
-    ImGui::TextDisabled("Last %d frames. Total includes OreSim and ESP.",static_cast<int>(Performance::samples[0].size));
-    ImGui::SetCursorScreenPos(ImVec2(area_max.x-288,hotkeyY+170));
-    if(DrawRoundedButton(draw_list,"##export_diagnostics","Export report",ImVec2(156,28),Menu::Palette::Soft(),Menu::Palette::Border(),Menu::Palette::Accent(),alpha,6)) Diagnostics::Export();
-    ImGui::SetCursorScreenPos(ImVec2(area_max.x-120,hotkeyY+170));
-    if(DrawRoundedButton(draw_list,"##reset_perf","Reset",ImVec2(100,28),Menu::Palette::Soft(),Menu::Palette::Border(),Menu::Palette::Accent(),alpha,6)) Performance::Reset();
-    ImGui::SetCursorScreenPos(ImVec2(area_min.x+20,hotkeyY+210));
+    ImGui::SetCursorScreenPos(ImVec2(area_max.x-58,watermarkY+14));
+    CustomToggle("##watermark_enabled",&Config::watermark_enabled,alpha,38,21);
+    const float runtimeY=watermarkY+76;
+    draw_list->AddLine(ImVec2(area_min.x+20,runtimeY),ImVec2(area_max.x-20,runtimeY),ColA(Menu::Palette::Border(),alpha));
+    ImGui::SetCursorScreenPos(ImVec2(area_min.x+20,runtimeY+16));
+    ImGui::BeginGroup();
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX()+row_w);
-    ImGui::TextWrapped("%s",Diagnostics::status.empty() ? "Export saves a local text report with timings and module settings." : Diagnostics::status.c_str());
+    const auto runtime=GameRuntime::Info();
+    ImGui::TextUnformatted("Runtime compatibility");
+    ImGui::TextWrapped("Minecraft: %s | %s",runtime.version.c_str(),runtime.fabric?"Fabric":"Vanilla / other loader");
+    ImGui::TextWrapped("Namespace: %s",runtime.nameSpace.c_str());
+    ImGui::TextWrapped("Class loader: %s",runtime.loader.empty()?"Not resolved":runtime.loader.c_str());
+    ImGui::TextDisabled("26.2 base / 26.3 compatibility overlay selected automatically.");
     ImGui::PopTextWrapPos();
-    if(!Diagnostics::lastPath.empty()) {
-        if(ImGui::SmallButton("Copy report path")) ImGui::SetClipboardText(Diagnostics::lastPath.c_str());
-    }
-
+    ImGui::EndGroup();
     ImGui::Dummy(ImVec2(1,1));
     ImGui::EndChild();
 

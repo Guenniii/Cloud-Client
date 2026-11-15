@@ -3,10 +3,12 @@
 #include "../dependencies/imgui/imgui.h"
 
 namespace Menu::Widgets {
+    void DrawCustomColorPopup(const char*,std::atomic<int>*,ImVec2,bool,float);
+    void DrawColorRow(ImDrawList*, ImVec2, float, const char*, std::atomic<int>*, float);
     ImU32 ColA(ImU32 col, float mult);
     ImVec4 ColV(ImU32 col, float mult);
-    void DrawGlowCircle(ImDrawList* draw_list, ImVec2 center, float radius, ImU32 color, float alpha, int layers = 8);
-    void DrawGlowRect(ImDrawList* draw_list, ImVec2 min, ImVec2 max, float rounding, ImU32 color, float alpha, int layers = 8);
+    void DrawGlowCircle(ImDrawList* draw_list, ImVec2 center, float radius, ImU32 color, float alpha, int layers = 8, bool world = false);
+    void DrawGlowRect(ImDrawList* draw_list, ImVec2 min, ImVec2 max, float rounding, ImU32 color, float alpha, int layers = 8, bool world = false);
     bool CustomToggle(const char* label, bool* v, float alpha = 1.0f, float width = 44.0f, float height = 24.0f);
     bool DrawRoundedButton(ImDrawList* draw_list, const char* str_id, const char* label,
                               ImVec2 size, ImU32 bg_col, ImU32 bg_hover_col, ImU32 text_col,
@@ -16,6 +18,8 @@ namespace Menu::Widgets {
 }
 
 namespace Menu::Widgets {
+    void DrawCustomColorPopup(const char*,std::atomic<int>*,ImVec2,bool,float);
+    void DrawColorRow(ImDrawList*, ImVec2, float, const char*, std::atomic<int>*, float);
     bool CustomToggle(const char*, std::atomic<bool>*, float alpha = 1.0f, float width = 44.0f, float height = 24.0f);
     void DrawCheckboxRow(ImDrawList*, ImVec2, float, const char*, std::atomic<bool>*, float);
     void DrawSliderRow(ImDrawList*, ImVec2, float, const char*, std::atomic<int>*, int, int, const char*, float);

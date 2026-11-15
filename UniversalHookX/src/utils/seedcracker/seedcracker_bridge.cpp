@@ -1,14 +1,47 @@
+#include "../sdk/game_runtime.hpp"
 #include "seedcracker_bridge.hpp"
-#include "seedcracker_client_task_bytes.hpp"
+#include "../../modules/settings.hpp"
 #define _CRT_SECURE_NO_WARNINGS
 #include <cstdio>
 #include <cstring>
 #include <sstream>
 #include <mutex>
+#include <chrono>
 
 namespace SeedCracker {
 
     static std::mutex g_init_mutex;
+    static bool g_ready = false;
+    static std::chrono::steady_clock::time_point g_retry_after{};
+
+    // ExceptionDescribe writes to Java stderr. Also copy the cause chain to the
+    // native console, where injected-client diagnostics are normally read.
+    static bool ReportException(JNIEnv* env, const char* operation) {
+        auto error = env->ExceptionOccurred();
+        if (!error) return false;
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+        auto throwable = env->FindClass("java/lang/Throwable");
+        auto text = throwable ? env->GetMethodID(throwable, "toString", "()Ljava/lang/String;") : nullptr;
+        auto cause = throwable ? env->GetMethodID(throwable, "getCause", "()Ljava/lang/Throwable;") : nullptr;
+        if (env->ExceptionCheck()) env->ExceptionClear();
+        std::printf("[Bridge] JNI failure during %s\n", operation);
+        for (int depth=0; error && text && cause && depth<8; ++depth) {
+            auto value=static_cast<jstring>(env->CallObjectMethod(error,text));
+            if(env->ExceptionCheck()){env->ExceptionClear();break;}
+            std::printf("[Bridge] %s%s\n",depth?"Caused by: ":"",GameRuntime::String(env,value).c_str());
+            if(value)env->DeleteLocalRef(value);
+            auto next=env->CallObjectMethod(error,cause);
+            if(env->ExceptionCheck()){env->ExceptionClear();break;}
+            const bool cycle=next&&env->IsSameObject(next,error);
+            env->DeleteLocalRef(error);error=static_cast<jthrowable>(next);
+            if(cycle)break;
+        }
+        if(error)env->DeleteLocalRef(error);
+        if(throwable)env->DeleteLocalRef(throwable);
+        if(env->ExceptionCheck())env->ExceptionClear();
+        return true;
+    }
     static jclass task_class=nullptr;
     static jmethodID request_method=nullptr;
     static jobject g_classloader = nullptr;
@@ -23,6 +56,8 @@ namespace SeedCracker {
     static jmethodID g_get_status_method = nullptr;
     static jmethodID g_set_hashed_seed_method = nullptr;
     static jmethodID g_finalize_method = nullptr;
+    static jmethodID g_configure_scan_method = nullptr;
+    static jmethodID g_verified_seeds_method = nullptr;
 
     JNIEnv* GetMinecraftJNIEnv( ) {
         JavaVM* vms[1] = {nullptr};
@@ -50,56 +85,7 @@ namespace SeedCracker {
         return env;
     }
 
-    static jobject FindGameClassLoader(JNIEnv* env) {
-        jclass threadCls = env->FindClass("java/lang/Thread");
-        jmethodID getAllStackTraces = env->GetStaticMethodID(threadCls, "getAllStackTraces",
-                                                             "()Ljava/util/Map;");
-        jobject traces = env->CallStaticObjectMethod(threadCls, getAllStackTraces);
-
-        jclass mapCls = env->FindClass("java/util/Map");
-        jmethodID keySetMid = env->GetMethodID(mapCls, "keySet", "()Ljava/util/Set;");
-        jobject keySet = env->CallObjectMethod(traces, keySetMid);
-
-        jclass setCls = env->FindClass("java/util/Set");
-        jmethodID toArrayMid = env->GetMethodID(setCls, "toArray", "()[Ljava/lang/Object;");
-        jobjectArray threads = (jobjectArray)env->CallObjectMethod(keySet, toArrayMid);
-
-        jmethodID getCCL = env->GetMethodID(threadCls, "getContextClassLoader",
-                                            "()Ljava/lang/ClassLoader;");
-        jclass clCls = env->FindClass("java/lang/ClassLoader");
-        jmethodID loadClassMid = env->GetMethodID(clCls, "loadClass",
-                                                  "(Ljava/lang/String;)Ljava/lang/Class;");
-        jstring mcName = env->NewStringUTF("net.minecraft.client.Minecraft");
-
-        jobject gameLoader = nullptr;
-        const jsize n = env->GetArrayLength(threads);
-        for (jsize i = 0; i < n; ++i) {
-            jobject t = env->GetObjectArrayElement(threads, i);
-            if (!t)
-                continue;
-
-            jobject cl = env->CallObjectMethod(t, getCCL);
-            if (env->ExceptionCheck( )) {
-                env->ExceptionClear( );
-                continue;
-            }
-            if (!cl)
-                continue;
-
-            jobject mcCls = env->CallObjectMethod(cl, loadClassMid, mcName);
-            if (env->ExceptionCheck( )) {
-                env->ExceptionClear( );
-                continue;
-            }
-            if (mcCls) {
-                gameLoader = cl;
-                env->DeleteLocalRef(mcCls);
-                break;
-            }
-        }
-        env->DeleteLocalRef(mcName);
-        return gameLoader;
-    }
+    static jobject FindGameClassLoader(JNIEnv* env) { return GameRuntime::Loader(env); }
 
     bool Init(JNIEnv* env, const std::string& bridgeJarPath) {
         std::lock_guard<std::mutex> lock(g_init_mutex);
@@ -108,9 +94,20 @@ namespace SeedCracker {
             return false;
         }
 
-        if (g_bridge_class && g_init_cracking_method) {
-            return true;
-        }
+        if (ReportException(env, "entry to bridge initialization")) return false;
+        if (g_ready) return true;
+        const auto now=std::chrono::steady_clock::now();
+        if(now<g_retry_after)return false;
+        g_retry_after=now+std::chrono::seconds(10);
+        if(env->PushLocalFrame(96)!=JNI_OK){ReportException(env,"bridge local frame");return false;}
+        struct Attempt {
+            JNIEnv* env;
+            ~Attempt(){
+                ReportException(env,"bridge initialization");
+                if(!g_ready)Shutdown(env);
+                env->PopLocalFrame(nullptr);
+            }
+        } attempt{env};
 
         std::printf("[SeedCracker] Lade Bridge-Jar von: %s\n", bridgeJarPath.c_str( ));
 
@@ -143,7 +140,19 @@ namespace SeedCracker {
         }
 
         jclass urlClass = env->FindClass("java/net/URL");
-        jobjectArray urlArray = env->NewObjectArray(1, urlClass, urlObj);
+        const auto runtime=GameRuntime::Info();
+        const bool compatibility263=runtime.version=="26.3"||runtime.version.starts_with("26.3-")||runtime.version.starts_with("26.3.");
+        jobjectArray urlArray = env->NewObjectArray(compatibility263?2:1, urlClass, urlObj);
+        if(compatibility263){
+            auto external=env->GetMethodID(urlClass,"toExternalForm","()Ljava/lang/String;");
+            auto text=static_cast<jstring>(env->CallObjectMethod(urlObj,external));
+            const auto overlay="jar:"+GameRuntime::String(env,text)+"!/compat/26.3/";
+            auto ctor=env->GetMethodID(urlClass,"<init>","(Ljava/lang/String;)V");
+            auto path=env->NewStringUTF(overlay.c_str());auto url=env->NewObject(urlClass,ctor,path);
+            if(env->ExceptionCheck()||!url){env->ExceptionDescribe();env->ExceptionClear();return false;}
+            env->SetObjectArrayElement(urlArray,0,url);
+        }
+        std::printf("[Bridge] Runtime %s: selecting %s classes.\n",runtime.version.c_str(),compatibility263?"26.3 overlay":"26.2 base");
 
         jclass urlClassLoaderClass = env->FindClass("java/net/URLClassLoader");
         jmethodID urlClassLoaderCtor = env->GetMethodID(urlClassLoaderClass, "<init>",
@@ -154,6 +163,32 @@ namespace SeedCracker {
             env->ExceptionDescribe( );
             env->ExceptionClear( );
             return false;
+        }
+        // Bootstrap the loader subclass using only JDK types. Its child-first
+        // policy isolates vendored seed libraries from older copies in mods.
+        auto bootstrapLoad=env->GetMethodID(urlClassLoaderClass,"loadClass","(Ljava/lang/String;)Ljava/lang/Class;");
+        auto bootstrapName=env->NewStringUTF("phantomui.bootstrap.BridgeClassLoader");
+        auto bootstrapType=static_cast<jclass>(env->CallObjectMethod(classLoader,bootstrapLoad,bootstrapName));
+        if(ReportException(env,"load isolated bridge loader")||!bootstrapType)return false;
+        auto isolatedCtor=env->GetMethodID(bootstrapType,"<init>","([Ljava/net/URL;Ljava/lang/ClassLoader;)V");
+        if(ReportException(env,"isolated loader constructor")||!isolatedCtor)return false;
+        auto isolatedLoader=env->NewObject(bootstrapType,isolatedCtor,urlArray,gameLoader);
+        if(ReportException(env,"create isolated bridge loader")||!isolatedLoader)return false;
+        auto closeBootstrap=env->GetMethodID(urlClassLoaderClass,"close","()V");
+        if(closeBootstrap)env->CallVoidMethod(classLoader,closeBootstrap);
+        if(ReportException(env,"close bridge bootstrap loader"))return false;
+        classLoader=isolatedLoader;
+        if(compatibility263){
+            auto resource=env->GetMethodID(urlClassLoaderClass,"findResource","(Ljava/lang/String;)Ljava/net/URL;");
+            auto name=env->NewStringUTF("phantomui/seedcracker/SeedCrackerBridge.class");
+            auto resolved=env->CallObjectMethod(classLoader,resource,name);
+            auto external=env->GetMethodID(urlClass,"toExternalForm","()Ljava/lang/String;");
+            auto text=resolved?static_cast<jstring>(env->CallObjectMethod(resolved,external)):nullptr;
+            const auto location=GameRuntime::String(env,text);
+            if(env->ExceptionCheck()||location.find("!/compat/26.3/")==std::string::npos){
+                if(env->ExceptionCheck())env->ExceptionClear();
+                std::printf("[Bridge] Missing 26.3 overlay. Replace the bridge JAR and restart Minecraft.\n");return false;
+            }
         }
         g_classloader = env->NewGlobalRef(classLoader);
 
@@ -169,51 +204,36 @@ namespace SeedCracker {
         }
         g_bridge_class = (jclass)env->NewGlobalRef(bridgeClassObj);
 
-        g_scan_chunk_method = env->GetStaticMethodID(g_bridge_class,
-                                                     "scanChunkForShipwreckCandidates", "(II)Ljava/lang/String;");
-        g_scan_confirmed_method = env->GetStaticMethodID(g_bridge_class,
-                                                         "scanChunkForConfirmedShipwrecks", "(II)Ljava/lang/String;");
-        g_scan_treasure_method = env->GetStaticMethodID(g_bridge_class,
-                                                        "scanChunkForBuriedTreasure", "(II)Ljava/lang/String;");
-        g_init_cracking_method = env->GetStaticMethodID(g_bridge_class, "initCracking", "()V");
-        g_reset_cracking_method = env->GetStaticMethodID(g_bridge_class, "resetCracking", "()V");
-        g_tick_cracking_method = env->GetStaticMethodID(g_bridge_class, "tickCracking", "()V");
-        g_get_status_method = env->GetStaticMethodID(g_bridge_class,
-                                                     "getCrackingStatus", "()Ljava/lang/String;");
-        g_set_hashed_seed_method = env->GetStaticMethodID(g_bridge_class, "setHashedSeed", "(J)V");
-        g_finalize_method = env->GetStaticMethodID(g_bridge_class, "finalizeWorldSeedCandidates", "()V");
-
-        if (env->ExceptionCheck( )) {
-            env->ExceptionClear( );
-        }
-
-        if (!g_scan_chunk_method || !g_scan_confirmed_method || !g_init_cracking_method || !g_tick_cracking_method || !g_get_status_method) {
-            std::printf("[SeedCracker] Fehler: Konnte Pflicht-Methoden nicht finden.\n");
-            env->ExceptionDescribe( );
-            env->ExceptionClear( );
+        const auto method=[&](const char* name,const char* signature,bool required){
+            auto id=env->GetStaticMethodID(g_bridge_class,name,signature);
+            if(env->ExceptionCheck()){
+                if(required)ReportException(env,name);
+                else env->ExceptionClear();
+            }
+            if(!id)std::printf("[Bridge] %s method unavailable: %s %s\n",required?"Required":"Optional",name,signature);
+            return id;
+        };
+        // A missing optional method must never leave a pending exception that
+        // invalidates subsequent, required lookups.
+        g_scan_chunk_method=method("scanChunkForShipwreckCandidates","(II)Ljava/lang/String;",true);
+        g_scan_confirmed_method=method("scanChunkForConfirmedShipwrecks","(II)Ljava/lang/String;",true);
+        g_init_cracking_method=method("initCracking","()V",true);
+        g_tick_cracking_method=method("tickCracking","()V",true);
+        g_get_status_method=method("getCrackingStatus","()Ljava/lang/String;",true);
+        if(!g_scan_chunk_method||!g_scan_confirmed_method||!g_init_cracking_method||!g_tick_cracking_method||!g_get_status_method){
+            std::printf("[Bridge] Initialization failed; retry in 10 seconds.\n");
             return false;
         }
-
-        if (!g_scan_treasure_method) {
-            std::printf("[SeedCracker] scanChunkForBuriedTreasure optional fehlt.\n");
-        }
-        if (!g_reset_cracking_method) {
-            std::printf("[SeedCracker] resetCracking optional fehlt.\n");
-        }
-        if (!g_set_hashed_seed_method) {
-            std::printf("[SeedCracker] setHashedSeed optional fehlt.\n");
-        }
-        if (!g_finalize_method) {
-            std::printf("[SeedCracker] finalizeWorldSeedCandidates optional fehlt.\n");
-        }
-
-        g_scan_player_chunk_method = env->GetStaticMethodID(g_bridge_class,
-                                                            "scanPlayerChunkForShipwreckCandidates", "()Ljava/lang/String;");
-        if (env->ExceptionCheck( )) {
-            env->ExceptionClear( );
-            g_scan_player_chunk_method = nullptr;
-            std::printf("[SeedCracker] scanPlayerChunkForShipwreckCandidates nicht gefunden (optional, wird uebersprungen).\n");
-        }
+        g_scan_treasure_method=method("scanChunkForBuriedTreasure","(II)Ljava/lang/String;",false);
+        g_reset_cracking_method=method("resetCracking","()V",false);
+        g_set_hashed_seed_method=method("setHashedSeed","(J)V",false);
+        g_finalize_method=method("finalizeWorldSeedCandidates","()V",false);
+        g_scan_player_chunk_method=method("scanPlayerChunkForShipwreckCandidates","()Ljava/lang/String;",false);
+        g_configure_scan_method=method("configureScan","(I)V",true);
+        g_verified_seeds_method=method("getVerifiedSeedsForWorld","()[J",false);
+        if(!g_configure_scan_method)return false;
+        g_ready=true;
+        g_retry_after={};
 
         std::printf("[SeedCracker] Erfolgreich initialisiert und bereit!\n");
         return true;
@@ -230,11 +250,10 @@ namespace SeedCracker {
             return true;
         };
         if (failed()) return false;
+        env->CallStaticVoidMethod(g_bridge_class,g_configure_scan_method,jint(std::clamp(SeedCracker_Radius.load(),1,16)));
+        if(failed())return false;
         if (!task_class) {
-            jclass local = env->DefineClass(
-                "phantomui/seedcracker/NativeClientTask", g_classloader,
-                reinterpret_cast<const jbyte*>(kSeedCrackerClientTask),
-                static_cast<jsize>(sizeof(kSeedCrackerClientTask)));
+            jclass local = LoadExtensionClass(env,"phantomui.seedcracker.NativeClientTask");
             if (failed() || !local) return false;
             task_class = static_cast<jclass>(env->NewGlobalRef(local));
             env->DeleteLocalRef(local);
@@ -251,6 +270,13 @@ namespace SeedCracker {
 
     void Shutdown(JNIEnv* env) {
         if(!env) return;
+        g_ready=false;
+        request_method=nullptr;
+        g_configure_scan_method=nullptr;
+        g_scan_chunk_method=g_scan_player_chunk_method=g_scan_confirmed_method=g_scan_treasure_method=nullptr;
+        g_init_cracking_method=g_reset_cracking_method=g_tick_cracking_method=g_get_status_method=nullptr;
+        g_set_hashed_seed_method=g_finalize_method=nullptr;
+        g_verified_seeds_method=nullptr;
         if(g_classloader) {
             jclass type=env->GetObjectClass(g_classloader);
             if(type) {
@@ -418,6 +444,32 @@ namespace SeedCracker {
         }
 
         return status;
+    }
+
+    std::vector<long long> GetVerifiedSeeds(JNIEnv* env) {
+        std::vector<long long> seeds;
+        if (!env || !g_bridge_class || !g_verified_seeds_method)
+            return seeds;
+        auto array = static_cast<jlongArray>(env->CallStaticObjectMethod(g_bridge_class, g_verified_seeds_method));
+        if (env->ExceptionCheck()) {
+            env->ExceptionDescribe();
+            env->ExceptionClear();
+            return seeds;
+        }
+        if (!array)
+            return seeds;
+        const jsize count = env->GetArrayLength(array);
+        if (count > 0 && count < 4096) {
+            seeds.resize(static_cast<size_t>(count));
+            env->GetLongArrayRegion(array, 0, count, reinterpret_cast<jlong*>(seeds.data()));
+            if (env->ExceptionCheck()) {
+                env->ExceptionDescribe();
+                env->ExceptionClear();
+                seeds.clear();
+            }
+        }
+        env->DeleteLocalRef(array);
+        return seeds;
     }
 
     static std::vector<ChestHit> ParseHits(JNIEnv* env, jstring jresult) {

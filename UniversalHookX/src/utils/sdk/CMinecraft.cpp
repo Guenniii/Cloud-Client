@@ -1,5 +1,7 @@
 #include "CMinecraft.h"
 #include "jni_refs.hpp"
+#include "jni_safety.hpp"
+#include "../seedcracker/seedcracker_bridge.hpp"
 #include "../lifecycle/lifecycle.hpp"
 #include <Windows.h>
 #include <cstdio>
@@ -11,6 +13,10 @@ CMinecraft::CMinecraft(JavaVM* p_jvm) : p_jvm(p_jvm) {
     }
 
 CMinecraft::~CMinecraft( ) {
+        JNIEnv* current=nullptr;
+        if(p_jvm){auto result=p_jvm->GetEnv(reinterpret_cast<void**>(&current),JNI_VERSION_1_8);
+            if(result==JNI_EDETACHED)p_jvm->AttachCurrentThreadAsDaemon(reinterpret_cast<void**>(&current),nullptr);}
+        p_env=current;
         // Aufräumen der Globalen Referenzen
         if (p_env) {
             if (class_instance)
@@ -61,171 +67,70 @@ bool CMinecraft::IsInitialized( ) const {
     }
 
 bool CMinecraft::Init( ) {
-        if (!p_env) return false;
-        if (m_initialized)
-            return true;
+    if(!p_env)return false;if(m_initialized)return true;
+    if(!GameRuntime::Initialize(p_env)){std::printf("[-] SDK: Minecraft class loader unavailable.\n");return false;}
+    JniSafety::Lookup api(p_env);
+    auto cls=[&](const char* name){auto local=api.FindClass(name);return static_cast<jclass>(JniRefs::PromoteLocal(p_env,local));};
+    c_minecraft=cls("net/minecraft/client/Minecraft");c_player=cls("net/minecraft/client/player/LocalPlayer");
+    c_items=cls("net/minecraft/world/item/Items");c_item_stack=cls("net/minecraft/world/item/ItemStack");
+    c_multiplayer_mode=cls("net/minecraft/client/multiplayer/MultiPlayerGameMode");
+    c_inv_screen=cls("net/minecraft/client/gui/screens/inventory/InventoryScreen");
+    c_abstract_menu=cls("net/minecraft/world/inventory/AbstractContainerMenu");c_gui=cls("net/minecraft/client/gui/Gui");
+    c_vec2=cls("net/minecraft/world/phys/Vec2");c_inventory=cls("net/minecraft/world/entity/player/Inventory");
+    c_click_type=cls("net/minecraft/world/inventory/ContainerInput");m_click_path="net/minecraft/world/inventory/ContainerInput";
+    if(!c_click_type){c_click_type=cls("net/minecraft/world/inventory/ClickType");m_click_path="net/minecraft/world/inventory/ClickType";}
+    std::string inputPath="net/minecraft/client/player/ClientInput";c_input=cls(inputPath.c_str());
+    if(!c_input){inputPath="net/minecraft/client/player/Input";c_input=cls(inputPath.c_str());}
+    if(!c_minecraft||!c_player||!c_items||!c_item_stack||!c_multiplayer_mode||!c_click_type){std::printf("[-] SDK: Required runtime classes could not be resolved.\n");return false;}
+    class_ptr=c_minecraft;
+    auto instance=api.GetStaticMethodID(c_minecraft,"getInstance","()Lnet/minecraft/client/Minecraft;");
+    auto local=api.CallStaticObjectMethod(c_minecraft,instance);
+    if(!local)local=api.GetStaticObjectField(c_minecraft,api.GetStaticFieldID(c_minecraft,"instance","Lnet/minecraft/client/Minecraft;"));
+    class_instance=JniRefs::PromoteLocal(p_env,local);if(!class_instance)return false;
+    f_right_click_delay=api.GetFieldID(c_minecraft,"rightClickDelay","I");
+    f_player=api.GetFieldID(c_minecraft,"player","Lnet/minecraft/client/player/LocalPlayer;");
+    f_game_mode=api.GetFieldID(c_minecraft,"gameMode","Lnet/minecraft/client/multiplayer/MultiPlayerGameMode;");
+    f_gui=api.GetFieldID(c_minecraft,"gui","Lnet/minecraft/client/gui/Gui;");
+    f_inventory_menu=api.GetFieldID(c_player,"inventoryMenu","Lnet/minecraft/world/inventory/InventoryMenu;");
+    if(!f_inventory_menu)f_inventory_menu=api.GetFieldID(c_player,"containerMenu","Lnet/minecraft/world/inventory/AbstractContainerMenu;");
+    f_container_id=api.GetFieldID(c_abstract_menu,"containerId","I");
+    f_totem_static=api.GetStaticFieldID(c_items,"TOTEM_OF_UNDYING","Lnet/minecraft/world/item/Item;");
+    f_input=api.GetFieldID(c_player,"input",("L"+inputPath+";").c_str());
+    f_no_jump_delay=api.GetFieldID(c_player,"noJumpDelay","I");
+    f_move_vector=api.GetFieldID(c_input,"moveVector","Lnet/minecraft/world/phys/Vec2;");f_vec2_y=api.GetFieldID(c_vec2,"y","F");
+    m_set_screen=api.GetMethodID(c_gui,"setScreen","(Lnet/minecraft/client/gui/screens/Screen;)V");
+    m_inv_screen_init=api.GetMethodID(c_inv_screen,"<init>","(Lnet/minecraft/world/entity/player/Player;)V");
+    m_stack_is_empty=api.GetMethodID(c_item_stack,"isEmpty","()Z");m_stack_get_item=api.GetMethodID(c_item_stack,"getItem","()Lnet/minecraft/world/item/Item;");
+    m_get_offhand_item=api.GetMethodID(c_player,"getOffhandItem","()Lnet/minecraft/world/item/ItemStack;");
+    m_get_inventory=api.GetMethodID(c_player,"getInventory","()Lnet/minecraft/world/entity/player/Inventory;");
+    m_get_item_from_inv=api.GetMethodID(c_inventory,"getItem","(I)Lnet/minecraft/world/item/ItemStack;");
+    m_is_shifting=api.GetMethodID(c_player,"isShiftKeyDown","()Z");m_set_sprinting=api.GetMethodID(c_player,"setSprinting","(Z)V");
+    auto click="(IIIL"+m_click_path+";Lnet/minecraft/world/entity/player/Player;)V";
+    m_handle_inv_click=api.GetMethodID(c_multiplayer_mode,"handleContainerInput",click.c_str());
+    if(!m_handle_inv_click)m_handle_inv_click=api.GetMethodID(c_multiplayer_mode,"handleInventoryMouseClick",click.c_str());
+    o_pickup=JniRefs::PromoteLocal(p_env,api.GetStaticObjectField(c_click_type,api.GetStaticFieldID(c_click_type,"PICKUP",("L"+m_click_path+";").c_str())));
+    o_totem=JniRefs::PromoteLocal(p_env,api.GetStaticObjectField(c_items,f_totem_static));
+    o_obsidian=JniRefs::PromoteLocal(p_env,api.GetStaticObjectField(c_items,api.GetStaticFieldID(c_items,"OBSIDIAN","Lnet/minecraft/world/item/Item;")));
+    o_endcrystal=JniRefs::PromoteLocal(p_env,api.GetStaticObjectField(c_items,api.GetStaticFieldID(c_items,"END_CRYSTAL","Lnet/minecraft/world/item/Item;")));
+    c_interaction_hand=cls("net/minecraft/world/InteractionHand");
+    o_main_hand=JniRefs::PromoteLocal(p_env,api.GetStaticObjectField(c_interaction_hand,api.GetStaticFieldID(c_interaction_hand,"MAIN_HAND","Lnet/minecraft/world/InteractionHand;")));
+    m_get_main_hand_item=api.GetMethodID(c_player,"getMainHandItem","()Lnet/minecraft/world/item/ItemStack;");
+    m_swing_arm=api.GetMethodID(c_player,"swing","(Lnet/minecraft/world/InteractionHand;)V");
+    m_attack=api.GetMethodID(c_multiplayer_mode,"attack","(Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/entity/Entity;)V");
+    m_initialized=f_player&&f_game_mode&&m_get_inventory&&m_stack_is_empty;
+    std::printf("[%s] SDK: loader-aware initialization %s; inventory=%s.\n",m_initialized?"+":"-",m_initialized?"ready":"incomplete",m_handle_inv_click?"ready":"unavailable");
+    return m_initialized;
+}
 
-        std::printf("[*] CMinecraft: Starte zentrale JNI Initialisierung...\n");
-
-        // Helper Lambda für sicheres Laden von Klassen als GlobalRef
-        auto GetClass = [&](const char* name) -> jclass {
-            jclass l = p_env->FindClass(name);
-            if (p_env->ExceptionCheck( )) {
-                p_env->ExceptionClear( );
-                std::printf("[-] SDK: Klasse nicht gefunden: %s\n", name);
-                return nullptr;
-            }
-            jclass g = (jclass)p_env->NewGlobalRef(l);
-            p_env->DeleteLocalRef(l);
-            return g;
-        };
-
-        // 1. Klassen laden
-        c_minecraft = GetClass("net/minecraft/client/Minecraft");
-        c_player = GetClass("net/minecraft/client/player/LocalPlayer");
-        c_items = GetClass("net/minecraft/world/item/Items");
-        c_item_stack = GetClass("net/minecraft/world/item/ItemStack");
-        c_multiplayer_mode = GetClass("net/minecraft/client/multiplayer/MultiPlayerGameMode");
-        c_inv_screen = GetClass("net/minecraft/client/gui/screens/inventory/InventoryScreen");
-        c_abstract_menu = GetClass("net/minecraft/world/inventory/AbstractContainerMenu");
-        c_gui = GetClass("net/minecraft/client/gui/Gui");
-        c_vec2 = GetClass("net/minecraft/world/phys/Vec2");
-        c_inventory = GetClass("net/minecraft/world/entity/player/Inventory");
-
-        // ClickType Fallback-Logik
-        const char* paths[] = {"net/minecraft/world/inventory/ClickType", "net/minecraft/world/inventory/ContainerInput"};
-        for (const char* p : paths) {
-            c_click_type = GetClass(p);
-            if (c_click_type) {
-                m_click_path = p;
-                break;
-            }
-        }
-
-        // Input Fallback-Logik
-        c_input = GetClass("net/minecraft/client/player/ClientInput");
-        if (!c_input)
-            c_input = GetClass("net/minecraft/client/player/Input");
-
-        if (!c_minecraft || !c_player || !c_click_type) {
-            std::printf("[-] SDK: Kritische Basisklassen fehlen!\n");
-            return false;
-        }
-
-        // 2. Minecraft Instanz holen
-        class_ptr = c_minecraft;
-        jfieldID class_instance_field_id = p_env->GetStaticFieldID(c_minecraft, "instance", "Lnet/minecraft/client/Minecraft;");
-        if (!class_instance_field_id)
-            return false;
-        class_instance = JniRefs::PromoteLocal(p_env, p_env->GetStaticObjectField(c_minecraft, class_instance_field_id));
-        if (!class_instance)
-            return false;
-
-        // 3. Fields (Felder) holen
-        f_right_click_delay = p_env->GetFieldID(c_minecraft, "rightClickDelay", "I");
-        f_player = p_env->GetFieldID(c_minecraft, "player", "Lnet/minecraft/client/player/LocalPlayer;");
-        f_game_mode = p_env->GetFieldID(c_minecraft, "gameMode", "Lnet/minecraft/client/multiplayer/MultiPlayerGameMode;");
-        f_gui = p_env->GetFieldID(c_minecraft, "gui", "Lnet/minecraft/client/gui/Gui;");
-
-        // Container / Inventory Menu Fallback
-        f_inventory_menu = p_env->GetFieldID(c_player, "inventoryMenu", "Lnet/minecraft/world/inventory/InventoryMenu;");
-        if (p_env->ExceptionCheck( )) {
-            p_env->ExceptionClear( );
-            f_inventory_menu = p_env->GetFieldID(c_player, "containerMenu", "Lnet/minecraft/world/inventory/AbstractContainerMenu;");
-        }
-
-        f_container_id = p_env->GetFieldID(c_abstract_menu, "containerId", "I");
-        f_totem_static = p_env->GetStaticFieldID(c_items, "TOTEM_OF_UNDYING", "Lnet/minecraft/world/item/Item;");
-
-        // --- HIER WAR DER FEHLER: Jetzt sauber mit std::string gelöst ---
-        std::string input_signature = "L";
-        input_signature += (c_input ? "net/minecraft/client/player/ClientInput" : "net/minecraft/client/player/Input");
-        input_signature += ";";
-        f_input = p_env->GetFieldID(c_player, "input", input_signature.c_str( ));
-
-        // noJumpDelay (LivingEntity Fallback)
-        f_no_jump_delay = p_env->GetFieldID(c_player, "noJumpDelay", "I");
-        if (p_env->ExceptionCheck( )) {
-            p_env->ExceptionClear( );
-            jclass livingEntityClass = p_env->GetSuperclass(c_player);
-            f_no_jump_delay = p_env->GetFieldID(livingEntityClass, "noJumpDelay", "I");
-            p_env->DeleteLocalRef(livingEntityClass);
-        }
-
-        f_move_vector = p_env->GetFieldID(c_input, "moveVector", "Lnet/minecraft/world/phys/Vec2;");
-        f_vec2_y = p_env->GetFieldID(c_vec2, "y", "F");
-
-        // 4. Methods (Methoden) holen
-        m_set_screen = p_env->GetMethodID(c_gui, "setScreen", "(Lnet/minecraft/client/gui/screens/Screen;)V");
-        m_inv_screen_init = p_env->GetMethodID(c_inv_screen, "<init>", "(Lnet/minecraft/world/entity/player/Player;)V");
-        m_stack_is_empty = p_env->GetMethodID(c_item_stack, "isEmpty", "()Z");
-        m_stack_get_item = p_env->GetMethodID(c_item_stack, "getItem", "()Lnet/minecraft/world/item/Item;");
-        m_get_offhand_item = p_env->GetMethodID(c_player, "getOffhandItem", "()Lnet/minecraft/world/item/ItemStack;");
-        m_get_inventory = p_env->GetMethodID(c_player, "getInventory", "()Lnet/minecraft/world/entity/player/Inventory;");
-        m_get_item_from_inv = p_env->GetMethodID(c_inventory, "getItem", "(I)Lnet/minecraft/world/item/ItemStack;");
-        m_is_shifting = p_env->GetMethodID(c_player, "isShiftKeyDown", "()Z");
-        m_set_sprinting = p_env->GetMethodID(c_player, "setSprinting", "(Z)V");
-
-        // Click-Methode Verzweigung
-        std::string click_sig = "(IIIL" + m_click_path + ";Lnet/minecraft/world/entity/player/Player;)V";
-        m_handle_inv_click = p_env->GetMethodID(c_multiplayer_mode, "handleInventoryMouseClick", click_sig.c_str( ));
-        if (p_env->ExceptionCheck( ) || !m_handle_inv_click) {
-            p_env->ExceptionClear( );
-            m_handle_inv_click = p_env->GetMethodID(c_multiplayer_mode, "handleContainerInput", click_sig.c_str( ));
-        }
-
-        // 5. Globale Objekte holen
-        jfieldID fid_pickup = p_env->GetStaticFieldID(c_click_type, "PICKUP", ("L" + m_click_path + ";").c_str( ));
-        if (fid_pickup) {
-            jobject local_pickup = p_env->GetStaticObjectField(c_click_type, fid_pickup);
-            if (local_pickup)
-                o_pickup = JniRefs::PromoteLocal(p_env, local_pickup);
-        }
-
-        if (f_totem_static) {
-            jobject local_totem = p_env->GetStaticObjectField(c_items, f_totem_static);
-            if (local_totem)
-                o_totem = JniRefs::PromoteLocal(p_env, local_totem);
-        }
-
-
-        // In Init() nach dem Totem-Block einfügen:
-
-        // Obsidian Singleton
-        jfieldID fid_obsidian = p_env->GetStaticFieldID(c_items, "OBSIDIAN", "Lnet/minecraft/world/item/Item;");
-        if (fid_obsidian) {
-            jobject local_obsidian = p_env->GetStaticObjectField(c_items, fid_obsidian);
-            if (local_obsidian)
-                o_obsidian = JniRefs::PromoteLocal(p_env, local_obsidian);
-        }
-
-        jfieldID fid_endcrystal = p_env->GetStaticFieldID(c_items, "END_CRYSTAL", "Lnet/minecraft/world/item/Item;");
-        if (fid_endcrystal) {
-            jobject local_endcrystal = p_env->GetStaticObjectField(c_items, fid_endcrystal);
-            if (local_endcrystal)
-                o_endcrystal = JniRefs::PromoteLocal(p_env, local_endcrystal);
-        }
-
-
-        // InteractionHand
-        c_interaction_hand = GetClass("net/minecraft/world/InteractionHand");
-        if (c_interaction_hand) {
-            jobject local_main_hand = p_env->GetStaticObjectField(
-                c_interaction_hand,
-                p_env->GetStaticFieldID(c_interaction_hand, "MAIN_HAND", "Lnet/minecraft/world/InteractionHand;"));
-            if (local_main_hand)
-                o_main_hand = JniRefs::PromoteLocal(p_env, local_main_hand);
-        }
-
-        // Methoden
-        m_get_main_hand_item = p_env->GetMethodID(c_player, "getMainHandItem", "()Lnet/minecraft/world/item/ItemStack;");
-        m_swing_arm = p_env->GetMethodID(c_player, "swing", "(Lnet/minecraft/world/InteractionHand;)V");
-        m_attack = p_env->GetMethodID(c_multiplayer_mode, "attack", "(Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/entity/Entity;)V");
-
-        m_initialized = true;
-        std::printf("[+] CMinecraft: Komplettes SDK erfolgreich zentral initialisiert!\n");
-        return true;
-    }
+void CMinecraft::Swing(JNIEnv* env,jobject player) {
+    if(!env||!player||env->ExceptionCheck())return;
+    if(m_swing_arm&&o_main_hand){env->CallVoidMethod(player,m_swing_arm,o_main_hand);if(env->ExceptionCheck())env->ExceptionClear();return;}
+    JniSafety::LocalFrame frame(env,8);if(!frame)return;
+    auto cls=SeedCracker::LoadExtensionClass(env,"phantomui.compat.NativeActions");
+    if(env->ExceptionCheck()){env->ExceptionClear();return;}
+    JniSafety::Lookup api(env);auto method=api.GetStaticMethodID(cls,"swing","(Ljava/lang/Object;)V");
+    if(cls&&method){env->CallStaticVoidMethod(cls,method,player);if(env->ExceptionCheck()){env->ExceptionDescribe();env->ExceptionClear();}}
+}
 
 void CMinecraft::SetRightClickDelay(int new_delay) {
         JNIEnv* env = nullptr;

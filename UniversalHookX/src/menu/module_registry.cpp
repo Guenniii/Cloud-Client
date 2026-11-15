@@ -1,6 +1,8 @@
 #include "module_registry.hpp"
 #include "../modules/settings.hpp"
 #include <Windows.h>
+#include <string_view>
+#include <utility>
 #include "../input/key_mapping.hpp"
 #include "../utils/sdk/java.hpp"
 #include "../input/game_screen.hpp"
@@ -8,11 +10,100 @@
 
 namespace Menu::Registry {
 namespace {
-constexpr int MODULE_COUNT = 24;
+constexpr int MODULE_COUNT = 35;
 
 // Bind card hotkeys to the primary runtime feature, not unused UI flags.
 
 static ModuleData modules[MODULE_COUNT] = {
+    {"Target HUD",0,0,&TargetHUD_Enabled,3,{
+        {"Mini-Ansicht (aus: Modern)",SettingType::Checkbox,&TargetHUD_Mini},
+        {"Glow",SettingType::Checkbox,&TargetHUD_Glow},
+        {"Ruestung und Entfernung",SettingType::Checkbox,&TargetHUD_Details},
+        {"Vorschau im Menue",SettingType::Checkbox,&TargetHUD_Preview},
+        {"Nachanzeige",SettingType::SliderInt,nullptr,&TargetHUD_Hold,500,5000," ms"},
+        {"Groesse",SettingType::SliderInt,nullptr,&TargetHUD_Scale,75,150," %"},
+        {"Position X",SettingType::SliderInt,nullptr,&TargetHUD_X,0,100," %"},
+        {"Position Y",SettingType::SliderInt,nullptr,&TargetHUD_Y,0,100," %"},
+    }},
+    {"Loot Beacon",0,0,&LootBeacon_Enabled,3,{
+        {"Totems",SettingType::Checkbox,&LootBeacon_Totems},
+        {"Ausruestung / Waffen",SettingType::Checkbox,&LootBeacon_Equipment},
+        {"Sonstige Items",SettingType::Checkbox,&LootBeacon_Other},
+        {"Glow",SettingType::Checkbox,&LootBeacon_Glow},
+        {"Theme-Farbe",SettingType::Checkbox,&LootBeacon_Theme},
+        {"Farbe",SettingType::ColorRGB,nullptr,&LootBeacon_Color},
+        {"Reichweite",SettingType::SliderInt,nullptr,&LootBeacon_Range,8,128," m"},
+        {"Hoehe",SettingType::SliderInt,nullptr,&LootBeacon_Height,1,8," m"},
+        {"Breite",SettingType::SliderInt,nullptr,&LootBeacon_Width,1,6," px"},
+        {"Deckkraft",SettingType::SliderInt,nullptr,&LootBeacon_Opacity,10,100,"%"},
+    }},
+    {"Echo Trail",0,0,&EchoTrail_Enabled,3,{
+        {"Eigene Spur",SettingType::Checkbox,&EchoTrail_Self},
+        {"Glow",SettingType::Checkbox,&EchoTrail_Glow},
+        {"Theme-Farben",SettingType::Checkbox,&EchoTrail_Theme},
+        {"Farbe",SettingType::ColorRGB,nullptr,&EchoTrail_Color},
+        {"Dauer",SettingType::SliderInt,nullptr,&EchoTrail_Duration,500,6000," ms"},
+        {"Linienstaerke",SettingType::SliderInt,nullptr,&EchoTrail_Width,1,6," px"},
+        {"Reichweite",SettingType::SliderInt,nullptr,&EchoTrail_Range,16,256," m"},
+    }},
+    {"Item ESP",0,0,&ItemESP_Enabled,3,{
+        {"Totems",SettingType::Checkbox,&ItemESP_Totems},
+        {"Ausruestung / Waffen",SettingType::Checkbox,&ItemESP_Equipment},
+        {"Sonstige Items",SettingType::Checkbox,&ItemESP_Other},
+        {"Namen und Stackgroesse",SettingType::Checkbox,&ItemESP_Labels},
+        {"Glow",SettingType::Checkbox,&ItemESP_Glow},
+        {"Reichweite",SettingType::SliderInt,nullptr,&ItemESP_Range,8,128," m"},
+        {"Farbe: Totems",SettingType::ColorRGB,nullptr,&ItemESP_Colors[0]},
+        {"Farbe: Ausruestung",SettingType::ColorRGB,nullptr,&ItemESP_Colors[1]},
+        {"Farbe: Sonstige",SettingType::ColorRGB,nullptr,&ItemESP_Colors[2]},
+    }},
+    {"Friends",0,0,&Friends_Enabled,2,{
+        {"Freunde schuetzen",SettingType::Checkbox,&Friends_Enabled},
+        {"Mit Mittelklick hinzufuegen",SettingType::Checkbox,&Friends_MiddleClick},
+        {"ESP-Farbe",SettingType::ColorRGB,nullptr,&Friends_Color},
+    }},
+    {"Explosion Preview",0,0,&ExplosionPreview_Enabled,3,{
+        {"Kristalle",SettingType::Checkbox,&ExplosionPreview_Crystals},
+        {"Geladene Anker",SettingType::Checkbox,&ExplosionPreview_Anchors},
+        {"Zielschaden anzeigen",SettingType::Checkbox,&ExplosionPreview_Target},
+        {"Glow",SettingType::Checkbox,&ExplosionPreview_Glow},
+        {"Reichweite",SettingType::SliderInt,nullptr,&ExplosionPreview_Range,4,24," m"},
+    }},
+    {"Projectile Prediction",0,0,&ProjectilePrediction_Enabled,3,{
+        {"Vorschau fuer gehaltenes Item",SettingType::Checkbox,&ProjectilePrediction_Held},
+        {"Fliegende Projektile",SettingType::Checkbox,&ProjectilePrediction_Flying},
+        {"Aufprallmarker",SettingType::Checkbox,&ProjectilePrediction_Impact},
+        {"Aufprallblock hervorheben",SettingType::Checkbox,&ProjectilePrediction_HighlightBlock},
+        {"Glow",SettingType::Checkbox,&ProjectilePrediction_Glow},
+        {"Reichweite",SettingType::SliderInt,nullptr,&ProjectilePrediction_Range,16,256," m"},
+        {"Simulationsdauer",SettingType::SliderInt,nullptr,&ProjectilePrediction_Ticks,20,160," ticks"},
+        {"Linienstaerke",SettingType::SliderInt,nullptr,&ProjectilePrediction_LineWidth,1,4," px"},
+    }},
+    {"Sound ESP",0,0,&SoundESP_Enabled,3,{
+        {"Schritte",SettingType::Checkbox,&SoundESP_Steps},
+        {"Projektile / Wuerfe",SettingType::Checkbox,&SoundESP_Projectiles},
+        {"Explosionen",SettingType::Checkbox,&SoundESP_Explosions},
+        {"Richtungsmarker am Bildschirmrand",SettingType::Checkbox,&SoundESP_Directions},
+        {"Glow",SettingType::Checkbox,&SoundESP_Glow},
+        {"Reichweite",SettingType::SliderInt,nullptr,&SoundESP_Range,8,128," m"},
+        {"Anzeigedauer",SettingType::SliderInt,nullptr,&SoundESP_Lifetime,500,5000," ms"},
+    }},
+    {"Storage ESP",0,0,&StorageESP_Enabled,3,{
+        {"Truhen",SettingType::Checkbox,&StorageESP_Chests},
+        {"Faesser",SettingType::Checkbox,&StorageESP_Barrels},
+        {"Shulker-Boxen",SettingType::Checkbox,&StorageESP_Shulkers},
+        {"Endertruhen",SettingType::Checkbox,&StorageESP_EnderChests},
+        {"Theme-Farbe statt eigener Farben",SettingType::Checkbox,&StorageESP_ThemeColors},
+        {"Farbe: Truhen",SettingType::ColorRGB,nullptr,&StorageESP_Colors[0]},
+        {"Farbe: Faesser",SettingType::ColorRGB,nullptr,&StorageESP_Colors[1]},
+        {"Farbe: Shulker",SettingType::ColorRGB,nullptr,&StorageESP_Colors[2]},
+        {"Farbe: Endertruhen",SettingType::ColorRGB,nullptr,&StorageESP_Colors[3]},
+        {"Beschriftungen",SettingType::Checkbox,&StorageESP_Labels},
+        {"Glow",SettingType::Checkbox,&StorageESP_Glow},
+        {"Reichweite",SettingType::SliderInt,nullptr,&StorageESP_Range,16,128," m"},
+        {"Linienstaerke",SettingType::SliderInt,nullptr,&StorageESP_LineWidth,1,4," px"},
+    }},
+
     {"Auto Armor", 0, 0, &AutoArmor_Enabled, 2, {
         {"Console-Diagnose", SettingType::Checkbox, &AutoArmor_Logs},
         {"Elytra behalten", SettingType::Checkbox, &AutoArmor_KeepElytra},
@@ -21,8 +112,9 @@ static ModuleData modules[MODULE_COUNT] = {
     {"Refill", 0, 0, &Refill_Enabled, 2, {
         {"Bei Restmenge auffuellen", SettingType::SliderInt, nullptr, &Refill_Threshold, 1, 63, " Items"},
         {"Inventar-Delay", SettingType::SliderInt, nullptr, &Refill_Delay, 50, 1000, " ms"},
+        {"Totems nachlegen", SettingType::Checkbox, &Refill_Totems},
     }},
-    {"Hit Effect", 0, 0, &HitEffect_Enabled, 0, {
+    {"Hit Effect", 0, 0, &HitEffect_Enabled, 3, {
         {"Console-Diagnose", SettingType::Checkbox, &HitEffect_Logs},
         {"Nur bestaetigte Treffer", SettingType::Checkbox, &HitEffect_ConfirmedOnly},
         {"Partikel pro Treffer", SettingType::SliderInt, nullptr, &HitEffect_Count, 4, 32},
@@ -43,6 +135,10 @@ static ModuleData modules[MODULE_COUNT] = {
     {"Auto Shield Breaker", 0, 0, &ShieldBreaker_Enabled, 0, {
         {"Automatisch angreifen (aus: beim Klick)", SettingType::Checkbox, &ShieldBreaker_Automatic},
         {"Angriffsabstand", SettingType::SliderInt, nullptr, &ShieldBreaker_Delay, 50, 1500, " ms"},
+    }},
+    {"Trigger Bot", 0, 0, &TriggerBot_Enabled, 0, {
+        {"Reaktionszeit", SettingType::SliderInt, nullptr, &TriggerBot_Delay, 0, 500, " ms"},
+        {"Nur mit Nahkampfwaffe", SettingType::Checkbox, &TriggerBot_OnlyWeapon},
     }},
 
     {"Fake Lag", 0, 0, &FakeLag_Enabled, 2, {
@@ -106,29 +202,41 @@ static ModuleData modules[MODULE_COUNT] = {
         {"Reichweite", SettingType::SliderInt, nullptr, &SilentAim_Range, 1, 6, " m"},
         {"FOV", SettingType::SliderInt, nullptr, &SilentAim_Fov, 10, 180, " deg"},
     }},
-    {"KillAura", 0, 0, &CW_Enabled, 0, {
-                                              {"Enable CW", SettingType::Checkbox, &CW_Enabled},
-                                              {"CW Delay", SettingType::SliderInt, nullptr, &CW_Delay, 0, 4},
+    {"Auto Crystal", 0, 0, &CW_Enabled, 0, {
+                                              {"CW Delay", SettingType::SliderInt, nullptr, &CW_Delay, 0, 4, " ticks"},
                                               {"HitCrystal", SettingType::Checkbox, &HitCrystal_Enabled},
+                                              {"HitCrystal: Obsidian-Delay", SettingType::SliderInt, nullptr, &HitCrystal_ObsidianDelay, 25, 250, " ms"},
+                                              {"HitCrystal: Kristall-Delay", SettingType::SliderInt, nullptr, &HitCrystal_CrystalDelay, 40, 300, " ms"},
+                                              {"HitCrystal: Pause danach", SettingType::SliderInt, nullptr, &HitCrystal_Cooldown, 50, 1000, " ms"},
                                           }},
     {"Reach", 0, 0, &Reach_Enabled, 0, {
                                            {"Enable Reach", SettingType::Checkbox, &Reach_Enabled},
                                            {"Range", SettingType::SliderInt, nullptr, &Reach_range, 3, 6},
                                        }},
-    {"Speed", 0, 0, &FastPlace_Enabled, 1, {
+    {"FastPlace", 0, 0, &FastPlace_Enabled, 1, {
                                            {"FastPlace", SettingType::Checkbox, &FastPlace_Enabled},
-                                           {"AutoSprint", SettingType::Checkbox, &AutoSprint_Enabled},
                                        }},
-    {"NoFall", 0, 0, &NoJumpDelay_Enabled, 1, {
+    {"AutoSprint", 0, 0, &AutoSprint_Enabled, 1, {
+                                                   {"AutoSprint", SettingType::Checkbox, &AutoSprint_Enabled},
+                                               }},
+
+    {"NoJumpDelay", 0, 0, &NoJumpDelay_Enabled, 1, {
                                                   {"NoJumpDelay", SettingType::Checkbox, &NoJumpDelay_Enabled},
                                               }},
     {"AutoTotem", 0, 0, &AutoTotem_Enabled, 2, {
                                                {"AutoTotem", SettingType::Checkbox, &AutoTotem_Enabled},
+                                               {"Delay nach Pop", SettingType::SliderInt, nullptr, &AutoTotem_PopDelay, 0, 1000, " ms"},
+                                               {"Inventar-Delay", SettingType::SliderInt, nullptr, &AutoTotem_SwapDelay, 0, 500, " ms"},
+                                               {"Totem-Suchintervall", SettingType::SliderInt, nullptr, &AutoTotem_RetryInterval, 100, 5000, " ms"},
                                            }},
     {"SeedCracker", 0, 0, &SeedCracker_Enabled, 2, {
-                                                       {"SeedCracker", SettingType::Checkbox, &SeedCracker_Enabled},
+                                                       {"Scanradius (Chunks)", SettingType::SliderInt, nullptr, &SeedCracker_Radius, 1, 16, " chunks"},
+        {"Seed automatisch an OreSim", SettingType::Checkbox, &SeedCracker_AutoApplySeed},
+        {"Shipwreck-Boxen", SettingType::Checkbox, &SeedCracker_Boxes},
+        {"Box-Glow", SettingType::Checkbox, &SeedCracker_BoxGlow},
+        {"Linienstaerke", SettingType::SliderInt, nullptr, &SeedCracker_BoxWidth, 1, 4, " px"},
                                                    }},
-    {"OreSim", 0, 0, &OreSim_Enabled, 2, {
+    {"OreSim", 0, 0, &OreSim_Enabled, 3, {
         {"Radius (Chunks)", SettingType::SliderInt, nullptr, &OreSim_Radius, 1, 6},
         {"Luft ausblenden", SettingType::Checkbox, &OreSim_AirCheck},
         {"Kohle", SettingType::Checkbox, &OreSim_Ores[0]},
@@ -142,7 +250,7 @@ static ModuleData modules[MODULE_COUNT] = {
         {"Quarz", SettingType::Checkbox, &OreSim_Ores[8]},
         {"Antiker Schutt", SettingType::Checkbox, &OreSim_Ores[9]},
     }},
-    {"Player ESP", 0, 0, &PlayerESP_Enabled, 2, {
+    {"Player ESP", 0, 0, &PlayerESP_Enabled, 3, {
         {"Skin statt Boxen", SettingType::Checkbox, &PlayerESP_Skin},
         {"Glow", SettingType::Checkbox, &PlayerESP_Glow},
         {"Reichweite", SettingType::SliderInt, nullptr, &PlayerESP_Range, 16, 256, " m"},
@@ -150,9 +258,79 @@ static ModuleData modules[MODULE_COUNT] = {
     }},
 };
 
+// Capture factory settings once, before profiles or runtime actions can change them.
+const auto factory_values = [] {
+    std::vector<std::vector<int>> values;
+    for (const auto& module : modules) {
+        std::vector<int> settings;
+        for (const auto& setting : module.settings_list)
+            settings.push_back(setting.type == SettingType::Checkbox ? setting.b_val->load() : setting.i_val->load());
+        values.push_back(std::move(settings));
+    }
+    return values;
+}();
+
 }
 
 std::span<ModuleData> GetModules() { return modules; }
+
+void ResetModule(int index) {
+    if (index < 0 || index >= MODULE_COUNT) return;
+    auto& module = modules[index];
+    *module.enabled = false;
+    module.hotkey = 0;
+    module.hotkey_mode = Input::HotkeyMode::Toggle;
+    for (size_t i = 0; i < module.settings_list.size(); ++i) {
+        auto& setting = module.settings_list[i];
+        if (setting.type == SettingType::Checkbox) *setting.b_val = factory_values[index][i] != 0;
+        else *setting.i_val = factory_values[index][i];
+    }
+    *module.enabled = false;
+    if (Config::capturing_module_key == index) Config::capturing_module_key = -1;
+}
+
+const char* Description(const char* name) {
+    using namespace std::literals;
+    const std::pair<std::string_view, const char*> descriptions[] = {
+        {"Target HUD", "Shows the last player you attacked, with live stats until the configured delay expires. Drag the preview while the menu is open."},
+        {"Loot Beacon", "Marks selected dropped items with a vertical light beam; works without Item ESP."},
+        {"Echo Trail", "Draws fading movement paths behind players; respects the global AntiBot filter."},
+        {"Item ESP", "Highlights dropped items, with separate colors for each item group."},
+        {"Friends", "Protects saved friends from targeting and gives them a distinct ESP color."},
+        {"Explosion Preview", "Shows estimated explosion damage for nearby crystals and charged anchors."},
+        {"Projectile Prediction", "Previews projectile paths and their estimated impact point."},
+        {"Sound ESP", "Displays nearby sounds and their direction as visual markers."},
+        {"Storage ESP", "Highlights storage blocks with configurable colors and range."},
+        {"Auto Armor", "Equips better armor from your inventory when its conditions are met."},
+        {"Trigger Bot", "Attacks the player under your crosshair once the attack cooldown is charged."},
+        {"Refill", "Refills hotbar stacks from matching items in your inventory."},
+        {"Hit Effect", "Adds custom glowing particles to hits."},
+        {"Predict Double Hand", "Selects a hotbar totem when the configured danger checks trigger."},
+        {"Auto Shield Breaker", "Uses an axe against a player who is blocking with a shield."},
+        {"Fake Lag", "Delays outgoing movement updates according to its configured limits."},
+        {"Aim Assist", "Adjusts your visible aim towards eligible nearby targets."},
+        {"Auto Tool", "Selects a suitable tool for the block you are mining."},
+        {"Safe Anchor", "Coordinates anchor placement, charging and detonation."},
+        {"Breach Swap", "Coordinates the weapon switch following a sword attack."},
+        {"Auto Mace", "Coordinates mace attacks while falling towards an eligible target."},
+        {"Auto Pearl Catch", "Coordinates the pearl and wind-charge action on its hotkey."},
+        {"Short Wind Charge", "Uses a wind charge for the configured jump action."},
+        {"Safe Walk", "Helps prevent walking off block edges."},
+        {"AntiBot", "Filters suspected bots using the enabled player checks."},
+        {"SilentAim", "Adjusts attack targeting towards eligible players."},
+        {"Auto Crystal", "Automatically destroys placed crystals."},
+        {"Reach", "Controls the configured attack-range options."},
+        {"FastPlace", "Removes the right-click delay when placing blocks."},
+        {"AutoSprint", "Sprints automatically while moving forward and not sneaking."},
+        {"NoJumpDelay", "Removes the delay between jumps."},
+        {"AutoTotem", "Maintains totem protection using available inventory items."},
+        {"SeedCracker", "Collects structure data, verifies candidate world seeds and hands them to the ore simulation."},
+        {"OreSim", "Predicts ore locations using the world seed entered manually."},
+        {"Player ESP", "Highlights players using boxes or the configured skin rendering."}
+    };
+    for (const auto& [key, text] : descriptions) if (key == name) return text;
+    return "Configure the behavior of this module below.";
+}
 
 bool HasConflict(int key, int exceptModule) {
     if (!key) return false;

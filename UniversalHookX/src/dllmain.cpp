@@ -6,6 +6,7 @@
 #include "utils/sdk/java.hpp"
 #include "modules/ModuleManager.hpp"
 #include "input/rotation/manual_attack.hpp"
+#include "input/rotation/antibot.hpp"
 #include "utils/seedcracker/seedcracker_bridge.hpp"
 
 static DWORD WINAPI ClientWorker(LPVOID parameter) {
@@ -32,7 +33,7 @@ static DWORD WINAPI ClientWorker(LPVOID parameter) {
     Lifecycle::Trace("Clearing modules");
     ModuleManager::GetModules().clear();
     Lifecycle::Trace("Releasing bridge references");
-    if(p_jni) SeedCracker::Shutdown(p_jni->GetEnv());
+    if(p_jni) { PlayerFilter::Shutdown(p_jni->GetEnv()); SeedCracker::Shutdown(p_jni->GetEnv()); }
     Lifecycle::Trace("Releasing SDK / detaching worker JNI");
     p_jni.reset(); // JNI cache destructors run before this thread detaches from the VM.
     Lifecycle::Trace("Detaching console");

@@ -15,6 +15,7 @@ public:
     bool Init( );
 
     void SetRightClickDelay(int new_delay);
+    void Swing(JNIEnv* env, jobject player);
 
     void StartRightClickLoop( );
 

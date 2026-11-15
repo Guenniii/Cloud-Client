@@ -1,5 +1,6 @@
 #pragma once
 #include <Windows.h>
+#include "watermark.hpp"
 #include "../utils/utils.hpp"
 #include "../utils/config/config.hpp"
 #include "../utils/theme/theme.hpp"
@@ -8,10 +9,12 @@
 
 namespace Menu::StatusHud {
 inline void Draw() {
+    Watermark::Draw();
     if (!Config::hud_enabled) return;
     struct Entry { const char* name; std::atomic<bool>* enabled; };
     const Entry entries[] = {
-        {"Auto Armor",&AutoArmor_Enabled},{"Refill",&Refill_Enabled},{"Hit Effect",&HitEffect_Enabled},{"Predict Double Hand",&PredictDoubleHand_Enabled},{"Auto Shield Breaker",&ShieldBreaker_Enabled},
+        {"Target HUD",&TargetHUD_Enabled},
+        {"Auto Armor",&AutoArmor_Enabled},{"Refill",&Refill_Enabled},{"Hit Effect",&HitEffect_Enabled},{"Predict Double Hand",&PredictDoubleHand_Enabled},{"Auto Shield Breaker",&ShieldBreaker_Enabled},{"Trigger Bot",&TriggerBot_Enabled},
         {"CW", &CW_Enabled}, {"Reach", &Reach_Enabled},
         {"FastPlace", &FastPlace_Enabled}, {"AutoSprint", &AutoSprint_Enabled},
         {"NoJumpDelay", &NoJumpDelay_Enabled}, {"AutoTotem", &AutoTotem_Enabled},

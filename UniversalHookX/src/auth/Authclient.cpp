@@ -5,6 +5,7 @@
 #pragma comment(lib, "winhttp.lib")
 #include <iostream>
 #include <sstream>
+#include "avatar_policy.hpp"
 
 
 bool LoginRequest(const std::string& user, const std::string& passHash)
@@ -99,10 +100,10 @@ std::string LoginRequestWithResponse(const std::string& user, const std::string&
 }
 
 // Neue Funktion: Parst den Server-Response
-// Format: "OK|daysLeft|expiryDate" oder "FAIL", "NO_LICENSE", etc.
+// Format: "OK|daysLeft|expiryDate|username"; the username is optional for legacy servers.
 LicenseInfo ParseLoginResponse(const std::string& response)
 {
-    LicenseInfo info = { false, 0, "", "" };
+    LicenseInfo info = { false, 0, "", "", "" };
 
     if (response.empty())
     {
@@ -154,7 +155,17 @@ LicenseInfo ParseLoginResponse(const std::string& response)
     {
         // Zwei Pipes - daysLeft und expiryDate
         std::string daysStr = response.substr(pos1 + 1, pos2 - pos1 - 1);
-        std::string expiryStr = response.substr(pos2 + 1);
+        const size_t pos3 = response.find('|', pos2 + 1);
+        std::string expiryStr = response.substr(pos2 + 1, pos3 == std::string::npos ? std::string::npos : pos3 - pos2 - 1);
+
+        if (pos3 != std::string::npos) {
+            auto accountName = response.substr(pos3 + 1);
+            // Keep the server spelling intact; invalid optional metadata uses the legacy fallback.
+            bool valid = !accountName.empty() && accountName.size() <= 256;
+            for (unsigned char ch : accountName)
+                valid &= ch >= 32 && ch != 127 && ch != '|';
+            if (valid) info.username = std::move(accountName);
+        }
 
         info.daysLeft = std::stoi(daysStr);
         info.expiryDate = expiryStr;
@@ -162,4 +173,33 @@ LicenseInfo ParseLoginResponse(const std::string& response)
 
     info.success = true;
     return info;
+}
+
+// Image-only HTTPS request. An absent image or transport failure keeps the embedded avatar.
+std::vector<unsigned char> DownloadUserAvatar(const std::string& username) {
+    if(username.empty() || username.size()>256)return {};
+    struct HttpHandle {HINTERNET handle;~HttpHandle(){if(handle)WinHttpCloseHandle(handle);}};
+    HttpHandle session{WinHttpOpen(L"CloudClientProfile",WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,WINHTTP_NO_PROXY_NAME,WINHTTP_NO_PROXY_BYPASS,0)};
+    if(!session.handle)return {};
+    WinHttpSetTimeouts(session.handle,2000,2000,2000,2000);
+    HttpHandle connection{WinHttpConnect(session.handle,L"dashboard.cloudclient.vip",INTERNET_DEFAULT_HTTPS_PORT,0)};
+    if(!connection.handle)return {};
+    auto path="/profile/avatar?user="+AvatarPolicy::EncodeName(username);
+    std::wstring wide(path.begin(),path.end());
+    HttpHandle request{WinHttpOpenRequest(connection.handle,L"GET",wide.c_str(),nullptr,WINHTTP_NO_REFERER,WINHTTP_DEFAULT_ACCEPT_TYPES,WINHTTP_FLAG_SECURE)};
+    if(!request.handle)return {};
+    DWORD redirect=WINHTTP_OPTION_REDIRECT_POLICY_NEVER;
+    WinHttpSetOption(request.handle,WINHTTP_OPTION_REDIRECT_POLICY,&redirect,sizeof(redirect));
+    if(!WinHttpSendRequest(request.handle,L"Accept: image/png\r\n",DWORD(-1),WINHTTP_NO_REQUEST_DATA,0,0,0) || !WinHttpReceiveResponse(request.handle,nullptr))return {};
+    DWORD status=0,statusSize=sizeof(status);
+    if(!WinHttpQueryHeaders(request.handle,WINHTTP_QUERY_STATUS_CODE|WINHTTP_QUERY_FLAG_NUMBER,WINHTTP_HEADER_NAME_BY_INDEX,&status,&statusSize,WINHTTP_NO_HEADER_INDEX) || status!=200)return {};
+    wchar_t contentType[128]={};DWORD typeSize=sizeof(contentType);
+    if(!WinHttpQueryHeaders(request.handle,WINHTTP_QUERY_CONTENT_TYPE,WINHTTP_HEADER_NAME_BY_INDEX,contentType,&typeSize,WINHTTP_NO_HEADER_INDEX) || _wcsicmp(contentType,L"image/png")!=0)return {};
+    std::vector<unsigned char> image;unsigned char buffer[8192];DWORD read=0;
+    const auto deadline=GetTickCount64()+8000;
+    do {
+        if(GetTickCount64()>deadline || !WinHttpReadData(request.handle,buffer,sizeof(buffer),&read) || image.size()+read>AvatarPolicy::MaxBytes)return {};
+        image.insert(image.end(),buffer,buffer+read);
+    }while(read);
+    return AvatarPolicy::ValidImage(image)?image:std::vector<unsigned char>{};
 }

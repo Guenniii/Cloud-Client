@@ -1,3 +1,4 @@
+#include "../../utils/sdk/game_runtime.hpp"
 #include "HitCrystal.hpp"
 #include "../../utils/sdk/CMinecraft.h"
 #include "../../utils/lifecycle/lifecycle.hpp"
@@ -10,189 +11,280 @@
 #include "../../utils/SilentAim.hpp"
 #include "../../utils/sdk/jni_safety.hpp"
 #include "../../input/rotation/targeting.hpp"
+#include "../../input/game_screen.hpp"
+#include "../settings.hpp"
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
 
 HitCrystal::HitCrystal(JavaVM* jvm, CMinecraft* mc) : p_jvm(jvm), p_mc(mc) { }
 
-void HitCrystal::Run( ) {
-        JniSafety::ScopeExit resetRotation{[] { SilentAim::reset(SilentAim::Owner::HitCrystal); }};
-        std::printf("[*] HitCrystal::Run() aufgerufen.\n");
+void HitCrystal::Start( ) {
+    if (Lifecycle::requested || m_started.exchange(true))
+        return;
+    Lifecycle::Spawn([this] { Loop( ); });
+}
 
-        if (!p_mc->IsInitialized( )) {
-            std::printf("[-] HitCrystal::Run() -> CMinecraft nicht initialisiert. Abbruch.\n");
-            return;
-        }
+bool HitCrystal::Allowed(JNIEnv* env, jobject mc) {
+    if (!HitCrystal_Enabled || Lifecycle::requested || Menu_Enabled || !mc)
+        return false;
+    DWORD process = 0;
+    GetWindowThreadProcessId(GetForegroundWindow( ), &process);
+    return process == GetCurrentProcessId( ) && !Input::GameScreenOpen(env, mc);
+}
 
-        JNIEnv* env = nullptr;
-        if (p_jvm->AttachCurrentThread((void**)&env, nullptr) != JNI_OK) {
-            std::printf("[-] HitCrystal::Run() -> AttachCurrentThread fehlgeschlagen. Abbruch.\n");
-            return;
-        }
+bool HitCrystal::Wait(JNIEnv* env, jobject mc, DWORD ms) {
+    Sleep(ms);
+    return Allowed(env, mc);
+}
 
-        jobject mc_inst = p_mc->GetInstance( );
-        if (!mc_inst) {
-            std::printf("[-] HitCrystal::Run() -> mc_inst ist null. Abbruch.\n");
-            return;
-        }
-
-        jobject player = env->GetObjectField(mc_inst, p_mc->f_player);
-        if (!player) {
-            std::printf("[-] HitCrystal::Run() -> player ist null. Abbruch.\n");
-            return;
-        }
-
-        // 1. Waffe prüfen
-        if (!IsHoldingSword(env, player)) {
-            std::printf("[-] HitCrystal::Run() -> Kein Schwert in der Hand. Abbruch.\n");
-            env->DeleteLocalRef(player);
-            return;
-        }
-
-        // 2. Obsidian suchen
-        int obsidian_slot = FindObsidianInHotbar(env, player);
-        if (obsidian_slot == -1) {
-            std::printf("[-] HitCrystal: Kein Obsidian in der Hotbar. Abbruch.\n");
-            env->DeleteLocalRef(player);
-            return;
-        }
-
-        // 3. Schwert-Slot für später merken
-        int sword_slot = FindSwordInHotbar(env, player);
-        if (sword_slot == -1) {
-            std::printf("[-] HitCrystal::Run() -> Kein Schwert in Hotbar. Abbruch.\n");
-            env->DeleteLocalRef(player);
-            return;
-        }
-
-        // --- NEU: PHASE 1 - AIM AUF OBSIDIAN & PLATZIEREN ---
-        std::printf("[*] HitCrystal: Wechsle zu Obsidian und aime auf den Block...\n");
-        SwitchToHotbarSlot(env, player, obsidian_slot);
-
-        // Wir holen uns die Zielkoordinaten für das Obsidian (unter dem zukünftigen Crystal)
-        Vector3d obsidianTarget = GetObsidianPlaceTarget(env, mc_inst, player);
-        ApplySilentAim(env, mc_inst, player, obsidianTarget);
-
-        Sleep(100);                  // Kurze Verzögerung für die Rotation
-        SwingMainHand(env, player); // Platziert Obsidian / Crystal-Basis
-        std::printf("[+] HitCrystal: Obsidian-Aim & Placement abgeschlossen.\n");
-
-        // 4. Crystal ausrüsten und platzieren
-        Sleep(100);
-        SwitchAndPlaceCrystal(env, player);
-        Sleep(100);
-        // --- NEU: PHASE 2 - EXAKT AUF CENTER VOM CRYSTAL AIMEN ---
-        std::printf("[*] HitCrystal: Suche platzierten Crystal für Center-Aim...\n");
-        jobject crystalEntity = FindNearestCrystalEntity(env, mc_inst, player);
-
-        if (crystalEntity) {
-            // Berechne exakt das CENTER des Crystals (Boden-Y + halbe Höhe)
-            Vector3d crystalPos = GetEntityPosition(env, crystalEntity);
-            // Ein EndCrystal ist 2.0 Blöcke hoch, die Mitte liegt also bei +1.0 Y
-            Vector3d crystalCenter = {crystalPos.x, crystalPos.y + 1.0, crystalPos.z};
-
-            std::printf("[*] HitCrystal: Aime silent auf Crystal-Center (X: %.2f, Y: %.2f, Z: %.2f)\n", crystalCenter.x, crystalCenter.y, crystalCenter.z);
-            ApplySilentAim(env, mc_inst, player, crystalCenter);
-
-            Sleep(20); // Warten bis Rotation greift
-            SwitchToHotbarSlot(env, player, sword_slot);
-            
-
-            // Explodiere direkt das gefundene Entity, statt das träge Client-'hitResult' zu nutzen
-            ForceExplodeCrystalEntity(env, mc_inst, player, crystalEntity);
-            env->DeleteLocalRef(crystalEntity);
-        } else {
-            std::printf("[-] HitCrystal: Kein Crystal zum Sprengen gefunden.\n");
-            SwitchToHotbarSlot(env, player, sword_slot);
-        }
-
-        // Silent Aim zurücksetzen
+void HitCrystal::Loop( ) {
+    JNIEnv* env = nullptr;
+    if (p_jvm->AttachCurrentThread((void**)&env, nullptr) != JNI_OK || !env)
+        return;
+    JniSafety::ScopeExit cleanup{[this, env] {
+        if (env->ExceptionCheck( ))
+            env->ExceptionClear( );
         SilentAim::reset(SilentAim::Owner::HitCrystal);
+        p_jvm->DetachCurrentThread( );
+    }};
+    while (!Lifecycle::requested) {
+        Sleep(5);
+        JniSafety::LocalFrame frame(env, 64);
+        if (!frame)
+            break;
+        if (!p_mc->IsInitialized( ))
+            continue;
+        jobject mc = p_mc->GetInstance( );
+        if ((GetAsyncKeyState(VK_RBUTTON) & 0x8000) && Allowed(env, mc))
+            Run(env, mc);
+        if (env->ExceptionCheck( ))
+            env->ExceptionClear( );
+    }
+}
 
-        Sleep(200);
-        env->DeleteLocalRef(player);
-        std::printf("[+] HitCrystal::Run() -> Abgeschlossen.\n");
+void HitCrystal::Run(JNIEnv* env, jobject mc_inst) {
+    JniSafety::ScopeExit resetRotation{[] { SilentAim::reset(SilentAim::Owner::HitCrystal); }};
+    auto softLog = [this](const char* msg) {
+        const ULONGLONG now = GetTickCount64( );
+        if (now - m_lastLog < 500)
+            return;
+        m_lastLog = now;
+        std::printf("[-] HitCrystal: %s\n", msg);
+    };
+    auto failed = [env] {
+        if (!env->ExceptionCheck( ))
+            return false;
+        env->ExceptionClear( );
+        return true;
+    };
+
+    jobject player = env->GetObjectField(mc_inst, p_mc->f_player);
+    if (failed( ) || !player) {
+        softLog("player ist null. Abbruch.");
+        return;
     }
 
-void HitCrystal::ApplySilentAim(JNIEnv* env, jobject mc_inst, jobject player, Vector3d targetPos) {
-        Vector3d eyePos = GetEyePosition(env, player);
-
-        const auto angles = Rotation::LookAt({eyePos.x, eyePos.y, eyePos.z},
-                                             {targetPos.x, targetPos.y, targetPos.z});
-        if (!angles) return;
-        SilentAimRequest req;
-        req.yaw = angles->yaw;
-        req.pitch = angles->pitch;
-        req.profile = Profile::COMBAT;
-        req.syncVisualHead = true;
-
-        SilentAim::apply(env, mc_inst, req, SilentAim::Owner::HitCrystal);
+    // 1. Waffe pruefen
+    if (!IsHoldingSword(env, player)) {
+        softLog("Kein Schwert in der Hand. Abbruch.");
+        return;
     }
+
+    // 2. Obsidian suchen
+    int obsidian_slot = FindObsidianInHotbar(env, player);
+    if (obsidian_slot == -1) {
+        softLog("Kein Obsidian in der Hotbar. Abbruch.");
+        return;
+    }
+
+    // 3. Schwert-Slot fuer spaeter merken
+    int sword_slot = FindSwordInHotbar(env, player);
+    if (sword_slot == -1) {
+        softLog("Kein Schwert in Hotbar. Abbruch.");
+        return;
+    }
+    if (failed( ))
+        return;
+    // Bei Abbruch zurueck aufs Schwert; nach dem geplanten Wechsel nicht erneut (User darf danach frei wechseln).
+    bool restoreSword = true;
+    JniSafety::ScopeExit backToSword{[this, env, player, sword_slot, &restoreSword] {
+        if (!restoreSword)
+            return;
+        if (env->ExceptionCheck( ))
+            env->ExceptionClear( );
+        SwitchToHotbarSlot(env, player, sword_slot);
+        if (env->ExceptionCheck( ))
+            env->ExceptionClear( );
+    }};
+
+    // PHASE 1 - AIM AUF OBSIDIAN & PLATZIEREN
+    std::printf("[*] HitCrystal: Wechsle zu Obsidian und aime auf den Block...\n");
+    SwitchToHotbarSlot(env, player, obsidian_slot);
+    if (failed( ))
+        return;
+
+    Vector3d obsidianTarget = GetObsidianPlaceTarget(env, mc_inst, player);
+    if (failed( ) || !ApplySilentAim(env, mc_inst, player, obsidianTarget))
+        return;
+
+    const DWORD obsDelay = (DWORD)std::clamp(HitCrystal_ObsidianDelay.load( ), 25, 250);
+    const DWORD crysDelay = (DWORD)std::clamp(HitCrystal_CrystalDelay.load( ), 40, 300);
+    if (!Wait(env, mc_inst, obsDelay))
+        return;
+    SwingMainHand(env, player); // Platziert Obsidian / Crystal-Basis
+    if (failed( ))
+        return;
+    std::printf("[+] HitCrystal: Obsidian-Aim & Placement abgeschlossen.\n");
+
+    // 4. Crystal ausruesten und platzieren
+    if (!Wait(env, mc_inst, obsDelay))
+        return;
+    SwitchAndPlaceCrystal(env, player);
+    if (failed( ) || !Wait(env, mc_inst, crysDelay))
+        return;
+
+    // PHASE 2 - EXAKT AUF CENTER VOM CRYSTAL AIMEN
+    std::printf("[*] HitCrystal: Suche platzierten Crystal fuer Center-Aim...\n");
+    jobject crystalEntity = FindNearestCrystalEntity(env, mc_inst, player);
+    if (failed( ))
+        return;
+
+    if (crystalEntity) {
+        Vector3d crystalPos = GetEntityPosition(env, crystalEntity);
+        // Ein EndCrystal ist 2.0 Bloecke hoch, die Mitte liegt also bei +1.0 Y
+        Vector3d crystalCenter = {crystalPos.x, crystalPos.y + 1.0, crystalPos.z};
+
+        std::printf("[*] HitCrystal: Aime silent auf Crystal-Center (X: %.2f, Y: %.2f, Z: %.2f)\n", crystalCenter.x, crystalCenter.y, crystalCenter.z);
+        if (!ApplySilentAim(env, mc_inst, player, crystalCenter))
+            return;
+
+        Sleep(20); // Warten bis Rotation greift
+        SwitchToHotbarSlot(env, player, sword_slot);
+        if (failed( ))
+            return;
+        restoreSword = false;
+
+        // Explodiere direkt das gefundene Entity, statt das traege Client-'hitResult' zu nutzen
+        ForceExplodeCrystalEntity(env, mc_inst, player, crystalEntity);
+        if (failed( ))
+            return;
+    } else {
+        std::printf("[-] HitCrystal: Kein Crystal zum Sprengen gefunden.\n");
+        SwitchToHotbarSlot(env, player, sword_slot);
+        if (failed( ))
+            return;
+        restoreSword = false;
+    }
+
+    SilentAim::reset(SilentAim::Owner::HitCrystal);
+
+    if (!Wait(env, mc_inst, (DWORD)std::clamp(HitCrystal_Cooldown.load( ), 50, 1000)))
+        return;
+    std::printf("[+] HitCrystal::Run() -> Abgeschlossen.\n");
+}
+
+bool HitCrystal::ApplySilentAim(JNIEnv* env, jobject mc_inst, jobject player, Vector3d targetPos) {
+    Vector3d eyePos = GetEyePosition(env, player);
+
+    const auto angles = Rotation::LookAt({eyePos.x, eyePos.y, eyePos.z},
+                                         {targetPos.x, targetPos.y, targetPos.z});
+    if (!angles)
+        return false;
+    SilentAimRequest req;
+    req.yaw = angles->yaw;
+    req.pitch = angles->pitch;
+    req.profile = Profile::COMBAT;
+    req.syncVisualHead = true;
+
+    // Standalone kann den Claim kurz halten (Update alle 5 ms).
+    for (int i = 0; i < 5; i++) {
+        if (SilentAim::apply(env, mc_inst, req, SilentAim::Owner::HitCrystal))
+            return true;
+        Sleep(5);
+    }
+    const ULONGLONG now = GetTickCount64( );
+    if (now - m_lastLog >= 500) {
+        m_lastLog = now;
+        std::printf("[-] HitCrystal: SilentAim-Claim fehlgeschlagen. Abbruch.\n");
+    }
+    return false;
+}
 
 jobject HitCrystal::FindNearestCrystalEntity(JNIEnv* env, jobject mc_inst, jobject player) {
-        jclass mc_class = env->GetObjectClass(mc_inst);
-        jfieldID f_level = env->GetFieldID(mc_class, "level", "Lnet/minecraft/client/multiplayer/ClientLevel;");
+    JniSafety::Lookup api(env);
+    jclass mc_class = api.GetObjectClass(mc_inst);
+    jfieldID f_level = api.GetFieldID(mc_class, "level", "Lnet/minecraft/client/multiplayer/ClientLevel;");
+    if (mc_class)
         env->DeleteLocalRef(mc_class);
-        if (!f_level)
-            return nullptr;
+    jobject level = api.GetObjectField(mc_inst, f_level);
+    if (!level)
+        return nullptr;
 
-        jobject level = env->GetObjectField(mc_inst, f_level);
-        if (!level)
-            return nullptr;
-
-        jclass level_class = env->GetObjectClass(level);
-        jmethodID m_get_entities = env->GetMethodID(level_class, "entitiesForRendering", "()Ljava/lang/Iterable;");
+    jclass level_class = api.GetObjectClass(level);
+    jmethodID m_get_entities = api.GetMethodID(level_class, "entitiesForRendering", "()Ljava/lang/Iterable;");
+    if (level_class)
         env->DeleteLocalRef(level_class);
-        if (!m_get_entities) {
-            env->DeleteLocalRef(level);
-            return nullptr;
-        }
+    jobject entities_iterable = api.CallObjectMethod(level, m_get_entities);
+    env->DeleteLocalRef(level);
+    if (!entities_iterable)
+        return nullptr;
 
-        jobject entities_iterable = env->CallObjectMethod(level, m_get_entities);
-        env->DeleteLocalRef(level);
-        if (!entities_iterable)
-            return nullptr;
-
-        jclass iterable_class = env->FindClass("java/lang/Iterable");
-        jmethodID m_iterator = env->GetMethodID(iterable_class, "iterator", "()Ljava/util/Iterator;");
+    jclass iterable_class = api.FindClass("java/lang/Iterable");
+    jmethodID m_iterator = api.GetMethodID(iterable_class, "iterator", "()Ljava/util/Iterator;");
+    if (iterable_class)
         env->DeleteLocalRef(iterable_class);
-        jobject iterator = env->CallObjectMethod(entities_iterable, m_iterator);
-        env->DeleteLocalRef(entities_iterable);
+    jobject iterator = api.CallObjectMethod(entities_iterable, m_iterator);
+    env->DeleteLocalRef(entities_iterable);
 
-        jclass iterator_class = env->FindClass("java/util/Iterator");
-        jmethodID m_has_next = env->GetMethodID(iterator_class, "hasNext", "()Z");
-        jmethodID m_next = env->GetMethodID(iterator_class, "next", "()Ljava/lang/Object;");
+    jclass iterator_class = api.FindClass("java/util/Iterator");
+    jmethodID m_has_next = api.GetMethodID(iterator_class, "hasNext", "()Z");
+    jmethodID m_next = api.GetMethodID(iterator_class, "next", "()Ljava/lang/Object;");
+    if (iterator_class)
         env->DeleteLocalRef(iterator_class);
 
-        jclass c_end_crystal = env->FindClass("net/minecraft/world/entity/boss/enderdragon/EndCrystal");
-        Vector3d eyePos = GetEyePosition(env, player);
-
-        jobject closestCrystal = nullptr;
-        double closestDist = 6.0;
-
-        while (env->CallBooleanMethod(iterator, m_has_next)) {
-            jobject entity = env->CallObjectMethod(iterator, m_next);
-            if (!entity)
-                continue;
-
-            if (env->IsInstanceOf(entity, c_end_crystal)) {
-                Vector3d crystalPos = GetEntityPosition(env, entity);
-                if (Rotation::Nearer({eyePos.x, eyePos.y, eyePos.z},
-                                     {crystalPos.x, crystalPos.y, crystalPos.z}, closestDist)) {
-                    if (closestCrystal)
-                        env->DeleteLocalRef(closestCrystal);
-                    closestCrystal = entity;
-                    continue;
-                }
-            }
-            env->DeleteLocalRef(entity);
-        }
-        env->DeleteLocalRef(iterator);
-        env->DeleteLocalRef(c_end_crystal);
-
-        return closestCrystal;
+    jclass c_end_crystal = api.FindClass("net/minecraft/world/entity/boss/enderdragon/EndCrystal");
+    if (!iterator || !m_has_next || !m_next || !c_end_crystal) {
+        if (iterator)
+            env->DeleteLocalRef(iterator);
+        if (c_end_crystal)
+            env->DeleteLocalRef(c_end_crystal);
+        return nullptr;
     }
+    Vector3d eyePos = GetEyePosition(env, player);
+
+    jobject closestCrystal = nullptr;
+    double closestDist = 6.0;
+
+    while (true) {
+        const jboolean more = env->CallBooleanMethod(iterator, m_has_next);
+        if (env->ExceptionCheck( )) {
+            env->ExceptionClear( );
+            break;
+        }
+        if (!more)
+            break;
+        jobject entity = api.CallObjectMethod(iterator, m_next);
+        if (!entity)
+            break; // Exception (z.B. ConcurrentModification) oder Ende: nicht weiter iterieren
+
+        if (env->IsInstanceOf(entity, c_end_crystal)) {
+            Vector3d crystalPos = GetEntityPosition(env, entity);
+            if (Rotation::Nearer({eyePos.x, eyePos.y, eyePos.z},
+                                 {crystalPos.x, crystalPos.y, crystalPos.z}, closestDist)) {
+                if (closestCrystal)
+                    env->DeleteLocalRef(closestCrystal);
+                closestCrystal = entity;
+                continue;
+            }
+        }
+        env->DeleteLocalRef(entity);
+    }
+    env->DeleteLocalRef(iterator);
+    env->DeleteLocalRef(c_end_crystal);
+
+    return closestCrystal;
+}
 
 HitCrystal::Vector3d HitCrystal::GetObsidianPlaceTarget(JNIEnv* env, jobject mc_inst, jobject player) {
         // Falls ein Crystal in der Nähe existiert, aime unter ihn (auf das Obsidian)
@@ -235,6 +327,8 @@ HitCrystal::Vector3d HitCrystal::GetEyePosition(JNIEnv* env, jobject entity) {
         if (m_get_eye_height) {
             pos.y += env->CallFloatMethod(entity, m_get_eye_height);
         }
+        if (env->ExceptionCheck( ))
+            env->ExceptionClear( );
         env->DeleteLocalRef(entityClass);
         return pos;
     }
@@ -251,6 +345,8 @@ HitCrystal::Vector3d HitCrystal::GetEntityPosition(JNIEnv* env, jobject entity) 
             pos.y = env->CallDoubleMethod(entity, m_getY);
             pos.z = env->CallDoubleMethod(entity, m_getZ);
         }
+        if (env->ExceptionCheck( ))
+            env->ExceptionClear( );
         env->DeleteLocalRef(entityClass);
         return pos;
     }
@@ -344,9 +440,7 @@ void HitCrystal::SwitchToHotbarSlot(JNIEnv* env, jobject player, int slot_index)
     }
 
 void HitCrystal::SwingMainHand(JNIEnv* env, jobject player) {
-        if (!p_mc->m_swing_arm || !p_mc->o_main_hand)
-            return;
-        env->CallVoidMethod(player, p_mc->m_swing_arm, p_mc->o_main_hand);
+        p_mc->Swing(env,player);
     }
 
 void HitCrystal::SwitchAndPlaceCrystal(JNIEnv* env, jobject player) {
@@ -376,7 +470,7 @@ void HitCrystal::SwitchAndPlaceCrystal(JNIEnv* env, jobject player) {
         if (crystal_slot == -1)
             return;
         SwitchToHotbarSlot(env, player, crystal_slot);
-        Sleep(50);
+        Sleep((DWORD)std::clamp(HitCrystal_CrystalDelay.load( ), 40, 300) / 2);
         SwingMainHand(env, player);
     }
 

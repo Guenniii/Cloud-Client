@@ -8,6 +8,7 @@
 
 #include "CMinecraft.h"
 #include "CFabric.h"
+#include "game_runtime.hpp"
 
 
 
@@ -32,12 +33,13 @@ public:
         //    p_cfabric = std::make_unique<CFabric>(p_jvm);
         }
 
-        is_init = true;
+        is_init = p_cminecraft && p_cminecraft->IsInitialized();
     }
 
     ~JNI( ) {
         p_cminecraft.reset();
         p_cfabric.reset();
+        GameRuntime::Shutdown(GetEnv());
         if(p_jvm) p_jvm->DetachCurrentThread( );
 
         is_init = false;
@@ -48,7 +50,11 @@ public:
     }
 
     JNIEnv* GetEnv( ) {
-        return p_env;
+        JNIEnv* current=nullptr;
+        if(!p_jvm)return nullptr;
+        auto result=p_jvm->GetEnv(reinterpret_cast<void**>(&current),JNI_VERSION_1_8);
+        if(result==JNI_EDETACHED && p_jvm->AttachCurrentThread(reinterpret_cast<void**>(&current),nullptr)!=JNI_OK)return nullptr;
+        return current;
     }
 
     // In der JNI Klasse unter GetEnv():
