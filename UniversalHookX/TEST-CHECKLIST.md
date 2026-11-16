@@ -107,3 +107,30 @@ Prüfsummen gesichert. Git-Commits werden nicht automatisch veröffentlicht.
 - Settings widgets: diamond toggles (also by clicking the label), 20-cell sliders (drag, Ctrl+click typing is clamped to the range, value and unit shown), colour rows with hexagon swatch; the colour picker (hue ring, SV square, hex field, quick colours, outside click / Escape closes) writes the same 0xRRGGBB values as the old popup. Values behave exactly as in the old menus. Storage ESP, OreSim (seed field row), Hit Effect, Aim Assist, Target HUD, Loot Beacon, Item ESP, Safe Anchor and Auto Crystal scroll in the inspector.
 - Animations: tiles fade in staggered after a category change (not on every search keystroke); the connection line grows from the selected tile on every selection change (also tile to tile), a light runs down the line and the end dot flashes, repeating subtly while the tile stays selected; the line is hidden when the tile is scrolled out and grows again when it returns; click flash on the tile; slider cells follow value changes smoothly. No visible frame-time regression against the Click GUI (Performance::Client).
 - Text: 10 px readability floor holds at 80 %; Orbit fonts load (no fallback to Poppins); "OFF" stays inside the toggle at 80 %.
+
+## Login (Orbit, `LOGIN_VIEW = 2`)
+
+Spezifikation: `../docs/login-orbit-design.md`. Umschalten über `constexpr int LOGIN_VIEW` in `src/menu/login.cpp` (neu bauen).
+
+- [ ] Intro: Ring zeichnet sich, Titel/Felder/Button blenden gestaffelt ein; Button bleibt ca. 1.6 s gesperrt, Enter in dieser Zeit sendet nichts.
+- [ ] Enter im Passwortfeld und Klick auf den Button senden jeweils genau eine Anfrage.
+- [ ] Auge-Button zeigt/versteckt das Passwort; der Text bleibt erhalten und der Fokus bleibt im Passwortfeld, man kann sofort weitertippen. Leerzeichen sind nicht tippbar.
+- [ ] Der Login ist standardmäßig aktiv (`logged_in` startet `false`); Enter im Benutzerfeld sendet nichts, nur Enter im Passwortfeld und der Button.
+- [ ] Feststelltaste an: „CAPS ON“ erscheint rechts über dem Button, aus: verschwindet.
+- [ ] Falsches Passwort: Karte schüttelt, Ring/Mitte rot, Passwortfeld rot, Pille „Invalid credentials · FAIL“; Tippen setzt den Feldstil zurück, die Pille bleibt bis zum nächsten Absenden.
+- [ ] Unbekannter Benutzer: Benutzerfeld rot. Konto ohne Lizenz / abgelaufen: Pille „No active license“ / „License expired“.
+- [ ] Server nicht erreichbar (Netzwerk aus): „Server not reachable“, Button „Retry“; wiederholtes Retry zeigt jedes Mal erneut Schütteln und Rot.
+- [ ] Laden: Titel „Verifying“, Felder halbtransparent und nicht editierbar, Ring dreht, Fortschrittsfeld statt Button, Zeit oben rechts läuft.
+- [ ] Erfolg mit Tageszahl und mit „PERMANENT“: Lizenzkarte (Zahl/Zellen, Ablaufdatum nur bei Tagen), Avatar-Platzhalter mit Initiale, dann Überblendung zum Profilbild; „AVATAR SYNCED“ erst danach. Das Profilbild gibt es nur bei einem Konto mit herunterladbarem Avatar, sonst bleibt die Initiale.
+- [ ] Enter/Klick während „Success“ und im Exit sendet keine zweite Anmeldung.
+- [ ] Standard `menu_style = 2` (`config.hpp`): Morph ins Orbit-Menü ohne leeren Frame, Ring passt, Menü startet voll geöffnet (Kacheln staffeln weiter).
+- [ ] Nur-Ausblenden: Standard `menu_style` in `config.hpp` auf 0 oder 1 ändern und neu bauen; kein Morph, Login blendet nur aus, danach das gewählte Menü.
+- [ ] Menü während des Morphs schließen und später öffnen: normales Einblenden, kein hängengebliebener Übergabezustand.
+- [ ] Kleines Spielfenster: Login verkleinert sich (fit) und bleibt bedienbar; Text mindestens 10 px.
+- [ ] Anderes Theme beim Login: Standard `Theme::selected` in `utils/theme/theme.hpp` ändern und neu bauen; Farben folgen `Theme::Current()`.
+- [ ] BETA-Badge (älterer, unabhängiger Stand): Antwort mit beta 1 / 0 / ohne Feld; Badge nur bei 1, im klassischen Footer und in der Orbit-Benutzerleiste.
+
+## Login (klassisch, `LOGIN_VIEW = 1`)
+
+- [ ] Ansicht und Ablauf unverändert (Intro, Anmeldung, Erfolg-Exit); Absenden ist nur im Success-Exit zusätzlich gesperrt.
+- [ ] Fehlertexte wie bisher („Invalid credentials“, „Your license has expired“, …).

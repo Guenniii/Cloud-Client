@@ -19,6 +19,16 @@ use this format. Keep the existing password, HWID and license checks in place.
 Do not normalize the database value for display. Failed authentication responses
 remain unchanged.
 
+Beta access is an optional fifth field, `1` (beta) or `0` (no beta):
+
+```text
+OK|daysLeft|expiryDate|username|beta
+OK|30|2026-11-04|Guenni|1
+```
+
+Only beta accounts get the BETA badge in the menu footer. A missing field means
+no beta; any other value is malformed and drops both the name and the flag.
+
 Legacy `OK`, `OK|daysLeft`, and `OK|daysLeft|expiryDate` responses remain supported.
 They have no canonical name, so the menu falls back to the entered spelling.
 The expiry field is parsed separately from the optional name. Empty, oversized,

@@ -138,6 +138,7 @@ namespace Menu::Resources {
         }
         return profileAvatar.TextureID()?profileAvatar.TextureID():userlogo.TextureID();
     }
+    bool HasUserAvatar() { return profileAvatar.TextureID() ? true : false; }
     void UpdateAnimation(float deltaTime) { UpdateGif(gif, deltaTime); }
     void ReleaseTextures(bool /*vulkanTextures*/) {
         DestroyTexture(&logo);

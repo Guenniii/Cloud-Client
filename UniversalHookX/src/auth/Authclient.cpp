@@ -100,10 +100,10 @@ std::string LoginRequestWithResponse(const std::string& user, const std::string&
 }
 
 // Neue Funktion: Parst den Server-Response
-// Format: "OK|daysLeft|expiryDate|username"; the username is optional for legacy servers.
+// Format: "OK|daysLeft|expiryDate|username|beta"; username and beta are optional for legacy servers.
 LicenseInfo ParseLoginResponse(const std::string& response)
 {
-    LicenseInfo info = { false, 0, "", "", "" };
+    LicenseInfo info = { false, 0, "", "", "", false };
 
     if (response.empty())
     {
@@ -159,11 +159,16 @@ LicenseInfo ParseLoginResponse(const std::string& response)
         std::string expiryStr = response.substr(pos2 + 1, pos3 == std::string::npos ? std::string::npos : pos3 - pos2 - 1);
 
         if (pos3 != std::string::npos) {
-            auto accountName = response.substr(pos3 + 1);
+            // Names never contain '|', so a 4th pipe starts the beta flag ("0"/"1"); any other
+            // trailing metadata is malformed and drops both optional fields.
+            const size_t pos4 = response.find('|', pos3 + 1);
+            const std::string betaStr = pos4 == std::string::npos ? "0" : response.substr(pos4 + 1);
+            auto accountName = response.substr(pos3 + 1, pos4 == std::string::npos ? std::string::npos : pos4 - pos3 - 1);
             // Keep the server spelling intact; invalid optional metadata uses the legacy fallback.
-            bool valid = !accountName.empty() && accountName.size() <= 256;
+            bool valid = !accountName.empty() && accountName.size() <= 256 && (betaStr == "0" || betaStr == "1");
             for (unsigned char ch : accountName)
                 valid &= ch >= 32 && ch != 127 && ch != '|';
+            info.beta = valid && betaStr == "1";
             if (valid) info.username = std::move(accountName);
         }
 

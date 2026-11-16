@@ -130,7 +130,8 @@ namespace Menu {
                 partile_pos[i].y = 0;
             }
 
-            ImGui::GetWindowDrawList( )->AddCircleFilled(partile_pos[i], partile_radius[i], ImColor(174, 139, 148, 255 / 2));
+            // theme accent at half alpha (follows presets, custom and animated accent)
+            ImGui::GetWindowDrawList( )->AddCircleFilled(partile_pos[i], partile_radius[i], ColA(Menu::Palette::Accent( ), 0.5f * ImGui::GetStyle( ).Alpha));
         }
     }
 
@@ -699,8 +700,10 @@ namespace Menu {
         float badge_h2 = 17.0f;
 
         ImVec2 badge_p2 = ImVec2(footer_p.x + 45 + username_size.x + badge_gap, footer_p.y + 3.5f);
-        draw_list->AddRectFilled(badge_p2, ImVec2(badge_p2.x + badge_w2, badge_p2.y + badge_h2), Menu::Palette::Soft(), badge_h2 * 0.5f);
-        draw_list->AddText(ImVec2(badge_p2.x + badge_padding_x2, badge_p2.y + 0.8f), Menu::Palette::Accent(), "BETA");
+        if (Login::HasBeta()) {
+            draw_list->AddRectFilled(badge_p2, ImVec2(badge_p2.x + badge_w2, badge_p2.y + badge_h2), Menu::Palette::Soft(), badge_h2 * 0.5f);
+            draw_list->AddText(ImVec2(badge_p2.x + badge_padding_x2, badge_p2.y + 0.8f), Menu::Palette::Accent(), "BETA");
+        }
 
         draw_list->AddText(ImVec2(footer_p.x + 45, footer_p.y + 21), ImColor(140, 150, 170), "Online");
 
@@ -763,11 +766,14 @@ namespace Menu {
         if(Menu_Enabled && Login::IsLoggedIn()) History::BeginFrame(); else History::Suspend();
         Registry::CaptureHotkey(); // LÃƒÂ¤uft immer, auch bei geschlossenem MenÃƒÂ¼
 
-        if (!Login::IsLoggedIn()) {
+        if (!Login::IsLoggedIn())
             Login::Render(Menu_Enabled, Particles);
-        } else {
+        // re-checked: the frame Login::Render flips logged_in already draws the menu (no blank frame after the morph)
+        if (Login::IsLoggedIn()) {
             StatusHud::Draw();
-            if (Menu_Enabled)
+            if (Menu_Enabled && Config::menu_style == 2 && Orbit::TakesLoginHandoff())
+                open_alpha = 1.0f;
+            else if (Menu_Enabled)
                 open_alpha = ImClamp(open_alpha + (2.f * ImGui::GetIO( ).DeltaTime * (toggled ? 1.5f : -1.5f)), 0.f, 1.f);
             else
                 open_alpha = 0;

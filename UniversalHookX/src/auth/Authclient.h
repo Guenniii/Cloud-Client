@@ -9,6 +9,7 @@ struct LicenseInfo
     std::string expiryDate;
     std::string errorMessage;
     std::string username; // Exact account spelling returned by the authenticated server.
+    bool beta = false;    // Optional 5th field "1"; absent or anything else = no beta access.
 
     const std::string& DisplayName(const std::string& enteredName) const {
         return success && !username.empty() ? username : enteredName;

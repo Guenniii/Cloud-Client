@@ -6,6 +6,7 @@
 #include "../dependencies/imgui/imgui_internal.h"
 #include "../utils/lifecycle/lifecycle.hpp"
 #include "../utils/theme/theme.hpp"
+#include "orbit.hpp"
 #include "palette.hpp"
 #include "resources.hpp"
 #include "widgets.hpp"
@@ -18,6 +19,9 @@
 namespace Menu::Login {
     using namespace Menu::Widgets;
     namespace {
+        // Login view: 1 = classic card, 2 = Orbit. Change and rebuild to switch.
+        constexpr int LOGIN_VIEW = 2;
+
         char username[64] = { };
         char password[64] = { };
         static bool show_password = false;
@@ -27,7 +31,8 @@ namespace Menu::Login {
         static std::string responseText = "";
         static std::string g_licenseDays = "PERMANENT";
         static std::string g_licenseExpiry = "";
-        static bool logged_in = true;
+        static bool g_beta = false;
+        static bool logged_in = false;
 
         static bool login_success_pending = false;
         static float login_success_timer = 0.0f;
@@ -59,6 +64,7 @@ namespace Menu::Login {
                     responseText = "OK";
                     g_licenseDays = result.license.daysLeft == -1 ? "PERMANENT" : std::to_string(result.license.daysLeft);
                     g_licenseExpiry = result.license.expiryDate;
+                    g_beta = result.license.beta;
                     last_logged_user = result.license.DisplayName(result.user);
                     Resources::RequestUserAvatar(last_logged_user);
                     login_success_pending = true;
@@ -115,19 +121,27 @@ namespace Menu::Login {
             draw->AddCircle(center, radius, ColA(Menu::Palette::Accent( ), alpha), 48, 1.5f);
         }
 
+        static void SubmitLogin( ) {
+            if (loginInProgress || login_success_pending || success_exit || !intro_done)
+                return;
+            loginInProgress = true;
+            responseText.clear( );
+            g_licenseDays.clear( );
+            g_licenseExpiry.clear( );
+            auto task = std::make_shared<std::packaged_task<LoginResult( )>>(
+                [user = std::string(username), pass = std::string(password)] {
+                    auto raw = LoginRequestWithResponse(user, Sha256(pass), GetHWID( ));
+                    return LoginResult{user, ParseLoginResponse(raw)};
+                });
+            pendingLogin = task->get_future( );
+            Lifecycle::Spawn([task] { (*task)( ); });
+        }
+
         void DrawModernLogin( ) {
             ImDrawList* draw = ImGui::GetWindowDrawList( );
             ImVec2 pos = ImGui::GetWindowPos( );
             ImVec2 size = ImGui::GetWindowSize( );
             const float a = login_alpha;
-            const float dt = ImGui::GetIO( ).DeltaTime;
-
-            // Intro vorantreiben (nicht während Exit)
-            if (!intro_done && !success_exit) {
-                intro_t += dt;
-                if (intro_t >= INTRO_DURATION)
-                    intro_done = true;
-            }
 
             const float card_w = 420.0f;
             const float card_h = 480.0f;
@@ -307,19 +321,8 @@ namespace Menu::Login {
                                             ui_a, 10.0f, true);
             }
 
-            if ((clicked || enter_submit) && !loginInProgress && !login_success_pending && intro_done) {
-                loginInProgress = true;
-                responseText.clear( );
-                g_licenseDays.clear( );
-                g_licenseExpiry.clear( );
-                auto task = std::make_shared<std::packaged_task<LoginResult( )>>(
-                    [user = std::string(username), pass = std::string(password)] {
-                        auto raw = LoginRequestWithResponse(user, Sha256(pass), GetHWID( ));
-                        return LoginResult{user, ParseLoginResponse(raw)};
-                    });
-                pendingLogin = task->get_future( );
-                Lifecycle::Spawn([task] { (*task)( ); });
-            }
+            if (clicked || enter_submit)
+                SubmitLogin( );
 
             fy += btn_h + 20.0f;
 
@@ -327,23 +330,7 @@ namespace Menu::Login {
                 bool ok = (responseText == "OK");
                 ImU32 status_col = ok ? Menu::Palette::Success( ) : IM_COL32(215, 85, 105, 255);
 
-                std::string msg = responseText;
-                if (responseText == "OK")
-                    msg = "Login successful";
-                else if (responseText == "FAIL")
-                    msg = "Invalid credentials";
-                else if (responseText == "LICENSE_INVALID")
-                    msg = "No active license";
-                else if (responseText == "HWID_MISMATCH")
-                    msg = "HWID mismatch";
-                else if (responseText == "NO_LICENSE")
-                    msg = "No license activated";
-                else if (responseText == "License expired")
-                    msg = "Your license has expired";
-                else if (responseText == "User not Found")
-                    msg = "User not found";
-                else if (responseText == "This User is banned")
-                    msg = "This account is banned";
+                const std::string msg = StatusText(responseText);
 
                 ImVec2 ms = ImGui::CalcTextSize(msg.c_str( ));
                 float pill_w = ms.x + 28.0f;
@@ -371,10 +358,23 @@ namespace Menu::Login {
         }
     } // namespace
 
+    std::string StatusText(const std::string& raw) {
+        if (raw == "OK") return "Login successful";
+        if (raw == "FAIL") return "Invalid credentials";
+        if (raw == "LICENSE_INVALID") return "No active license";
+        if (raw == "HWID_MISMATCH") return "HWID mismatch";
+        if (raw == "NO_LICENSE") return "No license activated";
+        if (raw == "License expired") return "Your license has expired";
+        if (raw == "User not Found") return "User not found";
+        if (raw == "This User is banned") return "This account is banned";
+        return raw;
+    }
+
     bool IsLoggedIn( ) { return logged_in; }
     const std::string& UserName( ) { return last_logged_user; }
     const std::string& LicenseDays( ) { return g_licenseDays; }
     const std::string& LicenseExpiry( ) { return g_licenseExpiry; }
+    bool HasBeta( ) { return g_beta; }
 
     void Render(bool menuEnabled, void (*drawParticles)( )) {
         PollLoginResult( );
@@ -405,7 +405,20 @@ namespace Menu::Login {
 
         const bool show_login = !logged_in;
 
-        if (show_login && login_alpha > 0.01f) {
+        // Intro advances once per drawn frame for both views (not during the exit)
+        if (show_login && login_alpha > 0.01f && !intro_done && !success_exit) {
+            intro_t += ImGui::GetIO( ).DeltaTime;
+            if (intro_t >= INTRO_DURATION)
+                intro_done = true;
+        }
+
+        if (show_login && login_alpha > 0.01f && LOGIN_VIEW == 2) {
+            View view{username, sizeof(username), password, sizeof(password), &show_password,
+                      loginInProgress, login_success_pending, success_exit, success_exit_t, &intro_t, &intro_done,
+                      &responseText, &g_licenseDays, &g_licenseExpiry, &last_logged_user, login_alpha, SUCCESS_EXIT_DURATION, login_success_timer, LOGIN_SUCCESS_HOLD};
+            if (Orbit::DrawLogin(view))
+                SubmitLogin( );
+        } else if (show_login && login_alpha > 0.01f) {
             const float win_w = 460.0f;
             const float win_h = 520.0f;
             ImGui::SetNextWindowSize(ImVec2(win_w, win_h));

@@ -1,6 +1,7 @@
 #include "orbit.hpp"
 #include "history.hpp"
 #include "key_names.hpp"
+#include "login.hpp"
 #include "module_registry.hpp"
 #include "module_view.hpp"
 #include "menu.hpp"
@@ -15,6 +16,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cstdlib>
 #include <cmath>
 #include <cstdio>
 #include <functional>
@@ -40,6 +42,7 @@ constexpr float ALPHA_GLOW = 0.55f, ALPHA_POWER_RING = 0.18f, ALPHA_SEGMENT_HALO
 float g_s = 1.0f;     // menu scale for this frame
 float g_fs = 1.0f;    // font size factor (font_size_percent): scales drawn text only, not layout
 float g_alpha = 1.0f; // alpha applied by A()
+int g_login_handoff_frame = -100; // frame of the last login morph frame; Orbit::Draw within 3 frames starts fully opened
 
 float Sc(float v) { return v * g_s; }
 float Fz(float size) { return (std::max)(MIN_TEXT_PX, Sc(size) * g_fs); } // pixel size of drawn text
@@ -217,6 +220,16 @@ void GlowRect(ImDrawList* dl, ImVec2 a, ImVec2 b, float rounding, float reach, I
         const float g = Sc(reach) * i / 3.0f;
         dl->AddRectFilled(ImVec2(a.x - g, a.y - g), ImVec2(b.x + g, b.y + g), ColA(accent, g_alpha * alpha * ALPHA_GLOW * glow * 0.35f / i), rounding + g);
     }
+}
+
+// Dot grid (2x2 squares every 18 px) over [x0,x1) x [y0,y1) in unscaled window coordinates.
+void DotGrid(ImDrawList* dl, ImVec2 wp, float x0, float x1, float y0, float y1) {
+    const float d = Sc(2);
+    for (float gy = y0; gy < y1; gy += 18.0f)
+        for (float gx = x0; gx < x1; gx += 18.0f) {
+            const ImVec2 p(ImFloor(wp.x + Sc(gx)), ImFloor(wp.y + Sc(gy)));
+            dl->AddRectFilled(p, ImVec2(p.x + d, p.y + d), DotCol());
+        }
 }
 
 // Label with ellipsis; tooltip = SettingHelp (plus the full name when clipped) while hovered.
@@ -540,6 +553,8 @@ void ColorRow(ImDrawList* dl, ImVec2 p, float w, ModuleSetting& s) {
 
 namespace Orbit {
 
+bool TakesLoginHandoff() { return ImGui::GetFrameCount() - g_login_handoff_frame <= 3; }
+
 void Draw() {
     const ImGuiIO& io = ImGui::GetIO();
     const float dt = io.DeltaTime;
@@ -557,12 +572,17 @@ void Draw() {
     static int line_mod = -2;                     // module the connection line currently belongs to
     static float line_g = 0.0f;                   // line growth 0..1
     static double comet_t0 = 0.0;                 // start of the travelling light
+    constexpr float COMET_TRAVEL = 0.15f;        // seconds from tile tip to line end (line growth uses the same)
     static bool comet_repeat = false;             // repeats are subtler than the first run
     static int press_mod = -1;                    // tile with a click feedback flash
     static double press_t0 = -10.0;
     const double now = ImGui::GetTime();
     const float dtc = (std::min)(dt, 0.1f);       // frame-rate independent, clamped after hitches
     if (ImGui::GetFrameCount() != last_frame + 1) { open_t = 0.0f; grid_t0 = now; line_mod = -2; press_mod = -1; }
+    // login morph already showed the open window: start fully opened (tiles still stagger in), selected segment without a fade
+    const bool handoff = ImGui::GetFrameCount() - g_login_handoff_frame <= 3;
+    g_login_handoff_frame = -100;
+    if (handoff) open_t = 1.0f;
     last_frame = ImGui::GetFrameCount();
     open_t += (1.0f - open_t) * ImSaturate(dtc * 9.4f);
 
@@ -623,14 +643,7 @@ void Draw() {
     const ImVec2 rc(wp.x + Sc(RING_CX), wp.y + Sc(RING_CY));
 
     // dot grid of the right zone (2x2 squares every 18 px)
-    {
-        const float d = Sc(2);
-        for (float gy = 12.0f; gy < WIN_H - 12.0f; gy += 18.0f)
-            for (float gx = RIGHT_X + 12.0f; gx < WIN_W - 12.0f; gx += 18.0f) {
-                const ImVec2 p(ImFloor(wp.x + Sc(gx)), ImFloor(wp.y + Sc(gy)));
-                dl->AddRectFilled(p, ImVec2(p.x + d, p.y + d), DotCol());
-            }
-    }
+    DotGrid(dl, wp, RIGHT_X + 12.0f, WIN_W - 12.0f, 12.0f, WIN_H - 12.0f);
 
     DrawGlowCircle(dl, rc, Sc(90), P::Accent(), g_alpha * 0.4f, 12); // zone halo, ~12 % peak
 
@@ -684,7 +697,7 @@ void Draw() {
     for (int i = 0; i < 4; ++i) {
         ImGui::PushID(i);
         const float hv = Anim(ImGui::GetID("hover"), ring_hit == i ? 1.0f : 0.0f, 25.0f);
-        const float av = Anim(ImGui::GetID("active"), sel == i ? 1.0f : 0.0f, 13.6f);
+        const float av = Anim(ImGui::GetID("active"), sel == i ? 1.0f : 0.0f, handoff ? 1000.0f : 13.6f);
         ImGui::PopID();
         // opening: the ring turns from -20 deg to 0 (labels and hit areas stay fixed)
         const float a0 = (RING_START + 90.0f * i - 20.0f * (1.0f - open_t)) * DEG, a1 = a0 + RING_SPAN * DEG;
@@ -781,23 +794,43 @@ void Draw() {
         TextC(dl, mf, 9, pmin.x + Sc(8), pmin.y + ph * 0.5f, A(Theme::Current().onAccent), label.c_str());
     }
 
-    // --- profile bar ---
+    // --- user bar: logged-in account with avatar (like the classic/v1 footer) ---
     {
         const ImVec2 pmin(wp.x + Sc(24), wp.y + Sc(532)), pmax(pmin.x + Sc(282), pmin.y + Sc(44));
         const float cy = pmin.y + Sc(22);
         dl->AddRectFilled(pmin, pmax, A(P::Card()), Sc(10));
         dl->AddRect(pmin, pmax, A(P::Border()), Sc(10));
-        const ImVec2 led(pmin.x + Sc(18), cy);
-        GlowDot(dl, led, Sc(4), 6, P::Accent(), 1.0f);
-        dl->AddCircleFilled(led, Sc(4), A(P::Accent()), 16);
+        const float ar = Sc(14);
+        const ImVec2 ac(pmin.x + Sc(8) + ar, cy);
+        dl->AddCircleFilled(ac, ar + Sc(1.5f), A(P::Border()), 32);
+        if (const ImTextureID avatar = Menu::Resources::UserTexture()) // null until Menu::Images() uploaded the textures
+            dl->AddImageRounded(avatar, ImVec2(ac.x - ar, ac.y - ar), ImVec2(ac.x + ar, ac.y + ar),
+                                ImVec2(0, 0), ImVec2(1, 1), IM_COL32(255, 255, 255, static_cast<int>(255 * g_alpha)), ar);
+        dl->AddCircle(ac, ar, A(P::Accent()), 32, Sc(1.5f));
+        const ImVec2 st(ac.x + ar * 0.72f, ac.y + ar * 0.72f); // online dot
+        dl->AddCircleFilled(st, Sc(4.5f), A(P::Card()), 16);
+        dl->AddCircleFilled(st, Sc(3.2f), A(P::Success()), 16);
         ImFont* mf = MonoFont(9);
-        const float tx = pmin.x + Sc(34);
-        TextC(dl, mf, 9, tx, cy - Sc(8), A(P::Label(), 0.8f), "PROFILE");
+        const float tx = ac.x + ar + Sc(10);
+        TextC(dl, mf, 9, tx, cy - Sc(8), A(P::Label(), 0.8f), "ONLINE");
         const char* end_txt = "END = unload";
         const float end_w = TextSize(mf, 9, end_txt).x;
-        ImGui::PushClipRect(ImVec2(tx, pmin.y), ImVec2(pmax.x - Sc(14) - end_w - Sc(6), pmax.y), true);
-        TextC(dl, TextFont(13, true), 13, tx, cy + Sc(7), A(P::Text()), Config::active_profile.empty() ? "(none)" : Config::active_profile.c_str());
+        const float name_max = pmax.x - Sc(14) - end_w - Sc(6);
+        ImFont* nf = TextFont(13, true);
+        const char* name = Menu::Login::UserName().c_str();
+        ImGui::PushClipRect(ImVec2(tx, pmin.y), ImVec2(name_max, pmax.y), true);
+        TextC(dl, nf, 13, tx, cy + Sc(7), A(P::Text()), name);
         ImGui::PopClipRect();
+        // BETA pill right after the name (as in the classic footer), only when it fits
+        ImFont* bf = MonoFont(9, true);
+        const ImVec2 bt = TextSize(bf, 9, "BETA");
+        const float bx = ImFloor(tx + TextSize(nf, 13, name).x + Sc(8)), bw = bt.x + Sc(12), bh = Sc(15);
+        if (Menu::Login::HasBeta() && bx + bw <= name_max) {
+            const ImVec2 bmin(bx, ImFloor(cy + Sc(7) - bh * 0.5f));
+            dl->AddRectFilled(bmin, ImVec2(bmin.x + bw, bmin.y + bh), A(P::Soft()), bh * 0.5f);
+            dl->AddRect(bmin, ImVec2(bmin.x + bw, bmin.y + bh), A(P::Accent(), 0.35f), bh * 0.5f);
+            TextC(dl, bf, 9, bmin.x + Sc(6), bmin.y + bh * 0.5f, A(P::Accent()), "BETA");
+        }
         TextC(dl, mf, 9, pmax.x - Sc(14) - end_w, cy, A(P::Label(), 0.8f), end_txt);
     }
 
@@ -1249,7 +1282,11 @@ void Draw() {
         } else {
             if (sel_mod != line_mod) { line_mod = sel_mod; line_g = 0.0f; comet_t0 = now; comet_repeat = false; }
             if (sel_ap < 0.9f) { line_g = 0.0f; comet_t0 = now; } // wait until the tile has faded in
-            else line_g += (1.0f - line_g) * ImSaturate(dtc * 16.7f); // grows in ~180 ms
+            else if (comet_repeat) line_g = 1.0f;
+            else { // the line tip is the light: both use the same smoothstep and arrive together
+                const float tp = ImSaturate(static_cast<float>(now - comet_t0) / COMET_TRAVEL);
+                line_g = tp * tp * (3.0f - 2.0f * tp);
+            }
         }
         if (line_on) {
             const float line_alpha = g_alpha;
@@ -1269,7 +1306,7 @@ void Draw() {
                 double age = now - comet_t0;
                 if (age > 4.5) { comet_t0 = now; comet_repeat = true; age = 0.0; }
                 const float gain = comet_repeat ? 0.5f : 1.0f;
-                constexpr float travel = 0.45f, flash_len = 0.4f;
+                constexpr float travel = COMET_TRAVEL, flash_len = 0.4f;
                 const float tp = ImSaturate(static_cast<float>(age) / travel);
                 const float f = (std::min)(tp * tp * (3.0f - 2.0f * tp), line_g); // smoothstep, never ahead of the grown line
                 const ImU32 hot = Theme::Current().hover;
@@ -1333,6 +1370,444 @@ void Draw() {
     ImGui::End();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(4);
+}
+
+// Display-only mapping of the raw server text (spec section 3); responseText and StatusText stay untouched.
+struct LoginError {
+    std::string text, code; // code empty = no raw-code suffix in the pill
+    const char* icon = ICON_FA_EXCLAMATION_TRIANGLE;
+    int field = 0; // 1 = username, 2 = password
+    bool retry = false, wifi_off = false;
+};
+static LoginError MapLoginError(const std::string& raw) {
+    LoginError e;
+    if (raw == "FAIL") { e = {"Invalid credentials", raw, ICON_FA_LOCK, 2}; }
+    else if (raw == "User not Found") { e = {"User not found", raw, ICON_FA_USER, 1}; }
+    else if (raw == "LICENSE_INVALID" || raw == "NO_LICENSE") { e = {"No active license", raw, ICON_FA_KEY}; }
+    else if (raw == "License expired") { e = {"License expired", "", ICON_FA_KEY}; }
+    else if (raw == "HWID_MISMATCH") { e = {"HWID mismatch", raw, ICON_FA_LOCK}; }
+    else if (raw == "This User is banned") { e = {"Account banned", "", ICON_FA_LOCK}; }
+    else if (raw == "Empty response" || raw == "Login request failed") { e = {"Server not reachable", "NO RESPONSE", ICON_FA_WIFI, 0, true, true}; }
+    else { // unknown server text: first line only, capped, never cut inside a UTF-8 sequence
+        e.text = raw.substr(0, raw.find_first_of("\r\n"));
+        if (e.text.size() > 60) {
+            size_t n = 60;
+            while (n > 0 && (static_cast<unsigned char>(e.text[n]) & 0xC0) == 0x80) --n;
+            e.text.resize(n);
+        }
+    }
+    return e;
+}
+
+// Orbit login (docs/login-orbit-design.md sections 1-3). State comes from the View only; intro and morph follow in step 5.
+bool DrawLogin(Menu::Login::View& v) {
+    constexpr float LW = 420.0f, LH = 540.0f, LR = 20.0f;
+    constexpr float FX = 40.0f, FW = 340.0f, FH = 44.0f; // field column
+    const ImGuiIO& io = ImGui::GetIO();
+    const ImVec2 display = io.DisplaySize;
+    const float fit = (std::min)((display.x - 32.0f) / LW, (display.y - 32.0f) / LH);
+    g_s = (std::max)(0.1f, (std::min)(Config::menu_size_percent.load() / 100.0f, fit));
+    g_fs = Config::font_size_percent.load() / 100.0f;
+    const float w = LW * g_s, h = LH * g_s;
+    const ImU32 err_col = IM_COL32(215, 85, 105, 255);
+    const double now = ImGui::GetTime();
+
+    // state, derived from the view only
+    const std::string& raw = *v.responseText;
+    const bool loading = v.loginInProgress;
+    const bool success = v.login_success_pending || v.success_exit;
+    const bool error = !raw.empty() && raw != "OK" && !loading && !success;
+    const LoginError err = error ? MapLoginError(raw) : LoginError{};
+
+    static bool was_loading = false, was_success = false, was_error = false;
+    static double load_t0 = 0.0, success_t0 = 0.0, shake_t0 = -10.0;
+    static std::string seen_raw;
+    static bool field_err_cleared = false; // typing after an error resets the field style, the pill stays
+    if (loading && !was_loading) load_t0 = now;
+    if (success && !was_success) success_t0 = now;
+    if (error && !was_error) shake_t0 = now;
+    was_loading = loading; was_success = success; was_error = error;
+    if (raw.empty() || raw != seen_raw) { seen_raw = raw; field_err_cleared = false; }
+
+    const float st = static_cast<float>(now - shake_t0);
+    const float shake = st >= 0.0f && st < 0.3f ? Sc(6) * std::sin(2.0f * PI * 5.0f * st) * (1.0f - st / 0.3f) : 0.0f; // 3 swings, damped
+
+    // success timeline: hold + exit = 1.8 s; from 1.1 s the Orbit menu follows (morph) or the window fades out
+    constexpr float MORPH_T0 = 1.1f, MORPH_FADE = 0.15f;
+    const float total = v.success_hold + v.success_exit_duration;
+    const float tsince = v.success_exit ? v.success_hold + v.success_exit_t : v.success_timer;
+    const bool orbit_next = Config::menu_style == 2;
+    const float mlen = (std::max)(total - MORPH_T0, 0.0f);
+    const float morph_raw = !success ? 0.0f : mlen > 0.0f ? ImSaturate((tsince - MORPH_T0) / mlen) : (tsince >= MORPH_T0 ? 1.0f : 0.0f);
+    const float mo = orbit_next ? (morph_raw < 0.5f ? 2.0f * morph_raw * morph_raw : 1.0f - std::pow(-2.0f * morph_raw + 2.0f, 2.0f) / 2.0f) : 0.0f;
+    const float cf = orbit_next ? 1.0f - ImSaturate(morph_raw * mlen / MORPH_FADE) : 1.0f; // content fade-out
+    const float base = v.login_alpha * (orbit_next ? 1.0f : 1.0f - morph_raw);
+    g_alpha = base;
+    if (mo > 0.0f) g_login_handoff_frame = ImGui::GetFrameCount();
+
+    // intro (only while intro_done is false): phase 0..1 of a time window, ease-out cubic
+    auto ph = [&](float t0, float t1) {
+        if (*v.intro_done) return 1.0f;
+        const float x = 1.0f - ImSaturate((*v.intro_t - t0) / (t1 - t0));
+        return 1.0f - x * x * x;
+    };
+
+    // window rect of Orbit::Draw (same scale, centring and previous-position clamp) as morph target
+    const float so_fit = (std::min)((display.x - 32.0f) / WIN_W, (display.y - 32.0f) / WIN_H);
+    const float so = (std::max)(0.1f, (std::min)(Config::menu_size_percent.load() / 100.0f, so_fit));
+    const ImVec2 osz(WIN_W * so, WIN_H * so);
+    ImVec2 opos((display.x - osz.x) * 0.5f, (display.y - osz.y) * 0.5f);
+    if (const ImGuiWindow* previous = ImGui::FindWindowByName(WINDOW_ID))
+        opos = ImVec2(ImClamp(previous->Pos.x, 0.0f, (std::max)(0.0f, display.x - osz.x)),
+                      ImClamp(previous->Pos.y, 0.0f, (std::max)(0.0f, display.y - osz.y)));
+    const ImVec2 lpos((display.x - w) * 0.5f + shake, (display.y - h) * 0.5f);
+    const ImVec2 wsize(w + (osz.x - w) * mo, h + (osz.y - h) * mo);
+
+    bool submit = false;
+    ImGui::SetNextWindowSize(wsize);
+    ImGui::SetNextWindowPos(ImVec2(lpos.x + (opos.x - lpos.x) * mo, lpos.y + (opos.y - lpos.y) * mo));
+    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, base);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, Sc(LR) + (so * 20.0f - Sc(LR)) * mo);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, P::Background());
+    ImGui::Begin("###login_orbit", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+    ImGui::SetWindowFontScale(g_fs);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImVec2 wp = ImGui::GetWindowPos();
+    auto at = [&](float x, float y) { return ImVec2(wp.x + Sc(x), wp.y + Sc(y)); };
+
+    const float err_t = Anim(ImGui::GetID("##err"), error ? 1.0f : 0.0f, 15.0f);     // ~200 ms to the error colour
+    const float close_t = Anim(ImGui::GetID("##close"), success ? 1.0f : 0.0f, 12.0f); // ~250 ms: segments close
+
+    dl->AddRect(wp, ImVec2(wp.x + wsize.x, wp.y + wsize.y), A(P::Border()), Sc(LR) + (so * 20.0f - Sc(LR)) * mo, 0, 1.0f);
+    if (mo <= 0.0f) {
+        DotGrid(dl, wp, 12.0f, LW - 12.0f, 12.0f, LH - 12.0f);
+    } else { // login lattice fades out while the menu's right-zone lattice (same anchors as Orbit::Draw) fades in
+        g_alpha = base * (1.0f - mo);
+        DotGrid(dl, wp, 12.0f, wsize.x / g_s - 12.0f, 12.0f, wsize.y / g_s - 12.0f);
+        const float login_s = g_s;
+        g_s = so;
+        g_alpha = base * mo;
+        DotGrid(dl, wp, RIGHT_X + 12.0f, WIN_W - 12.0f, 12.0f, WIN_H - 12.0f);
+        g_s = login_s;
+    }
+    g_alpha = base * cf;
+    const ImVec2 rc = at(210, 132);
+    DrawGlowCircle(dl, rc, Sc(80), Mix(P::Accent(), err_col, err_t), g_alpha * (success ? 0.6f : 0.33f), 12); // ~10 % peak (18 % on success)
+
+    // header: brand + version chip, status on the right
+    g_alpha = base * cf;
+    {
+        const ImVec2 b = at(24, 22);
+        ImFont* mono = MonoFont(12, true);
+        const float x1 = b.x + TextSize(mono, 12, "phantom").x, x2 = x1 + TextSize(mono, 12, "/").x;
+        dl->AddText(mono, Fz(12), b, A(P::Text()), "phantom");
+        dl->AddText(mono, Fz(12), ImVec2(x1, b.y), A(P::Accent()), "/");
+        dl->AddText(mono, Fz(12), ImVec2(x2, b.y), A(P::Text()), "ui");
+        ImFont* chip_font = MonoFont(10);
+        const float cx = x2 + TextSize(mono, 12, "ui").x + Sc(10), cw = TextSize(chip_font, 10, "MC 26.2").x + Sc(14), ch = Sc(18);
+        const float cy = b.y + Fz(12) * 0.5f;
+        dl->AddRect(ImVec2(cx, cy - ch * 0.5f), ImVec2(cx + cw, cy + ch * 0.5f), A(P::Border()), Sc(5));
+        TextC(dl, chip_font, 10, cx + Sc(7), cy, A(P::Muted()), "MC 26.2");
+        char auth[32] = "AUTH";
+        if (loading) std::snprintf(auth, sizeof(auth), "AUTH \xC2\xB7 %.1f s", now - load_t0);
+        else if (success) std::snprintf(auth, sizeof(auth), "AUTH \xC2\xB7 OK");
+        TextC(dl, chip_font, 10, wp.x + w - Sc(24) - TextSize(chip_font, 10, auth).x, cy, A(P::Muted()), auth);
+    }
+
+    // ring: 4 segments (82 deg, 8 deg gaps, start -86). Input: top-right accent (segment 0, -86..-4 deg). Loading: all accent, rotating, alpha 1/.5/.65/.8.
+    // Success: segments grow to 90 deg (closed circle). Error: error colour. Morph: centre/radius/width/span move to the menu ring.
+    const ImVec2 menu_rc(wp.x + RING_CX * so, wp.y + RING_CY * so);
+    const ImVec2 rrc(rc.x + (menu_rc.x - rc.x) * mo, rc.y + (menu_rc.y - rc.y) * mo);
+    {
+        g_alpha = base;
+        const float ring_r = Sc(60) + (RING_R * so - Sc(60)) * mo, ring_w = Sc(10) + (RING_W * so - Sc(10)) * mo;
+        static constexpr float load_alpha[4] = {1.0f, 0.5f, 0.65f, 0.8f};
+        const float rot = loading ? std::fmod(static_cast<float>(now - load_t0) / 1.2f, 1.0f) * 2.0f * PI : 0.0f;
+        for (int i = 0; i < 4; ++i) {
+            const float grow = ph(0.06f * i, 0.06f * i + 0.62f); // intro: each segment draws 0 -> full, staggered 60 ms
+            const float full = RING_SPAN + (90.0f - RING_SPAN) * close_t;
+            const float a0 = (RING_START + 90.0f * i) * DEG + rot, a1 = a0 + (full + (RING_SPAN - full) * mo) * grow * DEG;
+            ImU32 col = Mix(i == 0 ? P::Accent() : P::Toggle(), err_col, err_t);
+            if (loading) col = A(P::Accent(), load_alpha[i]);
+            else if (success) col = A(i == 0 ? P::Accent() : Mix(P::Accent(), P::Toggle(), mo));
+            else col = A(col);
+            if (i == 0 && !loading && !success) {
+                dl->PathArcTo(rrc, ring_r, a0, a1, 24);
+                dl->PathStroke(A(Mix(P::Accent(), err_col, err_t), ALPHA_SEGMENT_HALO * (std::min)(1.0f, Theme::MenuGlow())), 0, ring_w * 1.8f);
+            }
+            dl->PathArcTo(rrc, ring_r, a0, a1, 24);
+            dl->PathStroke(col, 0, ring_w);
+        }
+    }
+    g_alpha = base * ph(0.0f, 0.8f); // ticks and centre disc fade in with the ring
+    {
+        const float t0 = Sc(44) + (70.0f * so - Sc(44)) * mo, t1 = Sc(50) + (77.0f * so - Sc(50)) * mo;
+        const int sweep = static_cast<int>((now - load_t0) / (1.2 / 35.0)) % 35; // loading: 14 ticks light up and travel with the ring
+        for (int k = 0; k < 35; ++k) { // tick ring r 44-50
+            const float ang = (-90.0f + 360.0f * k / 35.0f) * DEG, ca = std::cos(ang), sa = std::sin(ang);
+            const bool lit = success || (loading && ((k - sweep + 35) % 35) < 14);
+            dl->AddLine(ImVec2(rrc.x + ca * t0, rrc.y + sa * t0), ImVec2(rrc.x + ca * t1, rrc.y + sa * t1),
+                        lit ? A(Mix(P::Accent(), ColA(P::Muted(), 0.30f), mo)) : A(P::Muted(), 0.30f), Sc(2.5f));
+        }
+    }
+
+    g_alpha = base * cf * ph(0.0f, 0.8f);
+    // centre: avatar on success, otherwise disc with ghost (error icon on error)
+    if (success) {
+        const float t = ImSaturate(static_cast<float>(now - success_t0) / 0.3f);
+        const float u = t - 1.0f, back = 1.0f + 2.70158f * u * u * u + 1.70158f * u * u; // ease-out back
+        const float sc = 0.6f + 0.4f * back;
+        const ImTextureID tex = Menu::Resources::UserTexture(); // also uploads the downloaded avatar
+        const bool has_avatar = tex && Menu::Resources::HasUserAvatar(); // UserTexture() falls back to the default logo
+        const float tex_t = Anim(ImGui::GetID("##avatar"), has_avatar ? 1.0f : 0.0f, 12.0f); // ~200 ms crossfade from the initial
+        DrawGlowCircle(dl, rc, Sc(30) * sc, P::Accent(), g_alpha * 0.5f, 12);
+        dl->AddCircleFilled(rc, Sc(35) * sc, A(P::Accent()), 48);
+        dl->AddCircleFilled(rc, Sc(33) * sc, A(P::Card()), 48);
+        dl->AddCircleFilled(rc, Sc(30) * sc, A(P::Accent(), 1.0f - tex_t), 48);
+        // initial only for an ASCII first character; otherwise the plain accent circle
+        if (tex_t < 0.99f && !v.last_logged_user->empty() && static_cast<unsigned char>((*v.last_logged_user)[0]) < 0x80) {
+            const char init[2] = {static_cast<char>(std::toupper(static_cast<unsigned char>((*v.last_logged_user)[0]))), 0};
+            ImFont* nf = TextFont(26, true);
+            TextC(dl, nf, 26, rc.x - TextSize(nf, 26, init).x * 0.5f, rc.y, A(Theme::Current().onAccent, 1.0f - tex_t), init);
+        }
+        if (has_avatar) {
+            const float r = Sc(30) * sc;
+            dl->AddImageRounded(tex, ImVec2(rc.x - r, rc.y - r), ImVec2(rc.x + r, rc.y + r), ImVec2(0, 0), ImVec2(1, 1), A(IM_COL32_WHITE, tex_t), r);
+        }
+    } else {
+        dl->AddCircleFilled(rc, Sc(34), A(P::Card()), 48);
+        dl->AddCircle(rc, Sc(34), A(P::Border()), 48, 1.0f);
+        if (error) {
+            IconC(dl, 24, rc.x, rc.y, A(err_col), err.icon);
+            if (err.wifi_off) dl->AddLine(ImVec2(rc.x - Sc(11), rc.y - Sc(11)), ImVec2(rc.x + Sc(11), rc.y + Sc(11)), A(err_col), Sc(2.5f));
+        } else {
+            IconC(dl, 24, rc.x, rc.y, A(P::Accent()), ICON_FA_GHOST);
+        }
+    }
+
+    // title + subline / error pill (intro: fade in and rise 6 px)
+    const float tp = ph(0.6f, 1.0f), ty = Sc(6) * (1.0f - tp);
+    g_alpha = base * cf * tp;
+    {
+        const std::string title = loading ? "Verifying" : success ? *v.last_logged_user : "Sign in";
+        bool trunc = false;
+        ImFont* tf = TextFont(26, true);
+        const std::string tt = FitText(tf, 26, Sc(FW), title, trunc);
+        TextC(dl, tf, 26, wp.x + (w - TextSize(tf, 26, tt.c_str()).x) * 0.5f, wp.y + Sc(214) + ty, A(P::Text()), tt.c_str());
+        if (error) {
+            ImFont* pf = TextFont(12, true);
+            ImFont* code_font = MonoFont(9);
+            const std::string msg = FitText(pf, 12, Sc(FW - 60), err.text, trunc);
+            const float tw = TextSize(pf, 12, msg.c_str()).x, cw = err.code.empty() ? 0.0f : TextSize(code_font, 9, err.code.c_str()).x + Sc(8);
+            const float pw = Sc(10 + 12 + 6) + tw + cw + Sc(10), pill_h = Sc(26);
+            const ImVec2 a(wp.x + (w - pw) * 0.5f, wp.y + Sc(234) + ty), b(a.x + pw, a.y + pill_h);
+            dl->AddRectFilled(a, b, A(err_col, 0.10f), Sc(8));
+            dl->AddRect(a, b, A(err_col, 0.40f), Sc(8), 0, 1.0f);
+            const float cy = (a.y + b.y) * 0.5f;
+            IconC(dl, 12, a.x + Sc(10 + 6), cy, A(err_col), err.icon);
+            TextC(dl, pf, 12, a.x + Sc(10 + 12 + 6), cy, A(err_col), msg.c_str());
+            if (cw > 0.0f) TextC(dl, code_font, 9, a.x + Sc(10 + 12 + 6) + tw + Sc(8), cy, A(P::Muted()), err.code.c_str());
+        } else {
+            ImFont* sf = MonoFont(10);
+            const char* sub = loading ? "CHECKING LICENSE \xC2\xB7 HWID" : success ? "WELCOME BACK" : "AUTHENTICATE TO OPEN ORBIT";
+            SpacedText(dl, sf, 10, ImVec2(wp.x + (w - SpacedWidth(sf, 10, sub, 1.5f)) * 0.5f, wp.y + Sc(247) + ty - Fz(10) * 0.5f), A(P::Muted()), sub, 1.5f);
+        }
+    }
+
+    g_alpha = base * cf;
+    if (success) {
+        // license card (days / expiry were stored before login_success_pending was set)
+        const ImVec2 a = at(FX, 282), b = at(FX + FW, 282 + 156);
+        dl->AddRectFilled(a, b, A(P::Card()), Sc(12));
+        dl->AddRect(a, b, A(P::Border()), Sc(12), 0, 1.0f);
+        const bool permanent = *v.license_days == "PERMANENT";
+        const int days = permanent ? 0 : std::atoi(v.license_days->c_str());
+        const float px = a.x + Sc(16), rx = b.x - Sc(16);
+        ImFont* m9 = MonoFont(9);
+        ImFont* m9b = MonoFont(9, true);
+        const float r1 = a.y + Sc(16 + 9);
+        IconC(dl, 12, px + Sc(6), r1, A(P::Accent()), ICON_FA_KEY);
+        SpacedText(dl, m9, 9, ImVec2(px + Sc(20), r1 - Fz(9) * 0.5f), A(P::Muted()), "LICENSE", 1.5f);
+        const float chw = TextSize(m9b, 9, "ACTIVE").x + Sc(16);
+        dl->AddRectFilled(ImVec2(rx - chw, r1 - Sc(9)), ImVec2(rx, r1 + Sc(9)), A(P::Success(), 0.14f), Sc(9));
+        TextC(dl, m9b, 9, rx - chw + Sc(8), r1, A(P::Success()), "ACTIVE");
+
+        const float r2 = a.y + Sc(70);
+        ImFont* nf = MonoFont(30, true);
+        char num[16];
+        std::snprintf(num, sizeof(num), "%d", days);
+        const char* big = permanent ? "PERMANENT" : num;
+        TextC(dl, nf, 30, px, r2, A(P::Accent()), big);
+        const float nw = TextSize(nf, 30, big).x;
+        if (!permanent) {
+            ImFont* df = TextFont(15, true);
+            TextC(dl, df, 15, px + nw + Sc(8), r2 + Sc(5), A(P::Label()), "days left");
+            if (!v.license_expiry->empty() && *v.license_expiry != "PERMANENT") {
+                const std::string ex = "EXPIRES " + *v.license_expiry;
+                ImFont* ef = MonoFont(10);
+                TextC(dl, ef, 10, rx - TextSize(ef, 10, ex.c_str()).x, r2 + Sc(5), A(P::Muted()), ex.c_str());
+            }
+        }
+
+        const float cw = (rx - px - Sc(3) * 19.0f) / 20.0f, cy0 = a.y + Sc(96), chh = Sc(10);
+        const int filled = permanent ? 20 : static_cast<int>(std::ceil(ImSaturate((std::min)(days, 30) / 30.0f) * 20.0f));
+        for (int i = 0; i < 20; ++i) {
+            const float x = px + i * (cw + Sc(3));
+            dl->AddRectFilled(ImVec2(x, cy0), ImVec2(x + cw, cy0 + chh), A(i < filled ? P::Accent() : P::Toggle()), Sc(2));
+        }
+        const float r4 = b.y - Sc(16 + 6);
+        dl->AddLine(ImVec2(px, r4 - Sc(18)), ImVec2(rx, r4 - Sc(18)), A(P::Border()));
+        TextC(dl, m9, 9, px, r4, A(P::Muted()), "HWID BOUND");
+        if (Menu::Resources::UserTexture() && Menu::Resources::HasUserAvatar())
+            TextC(dl, m9, 9, rx - TextSize(m9, 9, "AVATAR SYNCED").x, r4, A(P::Muted()), "AVATAR SYNCED");
+    } else {
+        // input fields: own rect + border, transparent ImGui frame on top
+        const float fa = loading ? 0.5f : 1.0f;
+        const float saved_alpha = base * ph(0.8f, 1.3f); // intro: fields fade in at 800-1300 ms
+        g_alpha = saved_alpha * fa;
+        ImGui::PushStyleVar(ImGuiStyleVar_Alpha, saved_alpha * fa);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_Text, ColV(P::Text(), 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_TextDisabled, ColV(P::Muted(), 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_TextSelectedBg, ColV(P::Soft(), 1.0f));
+        bool edited = false;
+        auto field = [&](const char* label, float label_y, float fy, const char* icon, const char* id, const char* hint,
+                         char* buf, size_t size, ImGuiInputTextFlags flags, ImFont* font, float right_pad, bool field_error, bool refocus = false) {
+            const ImU32 lab = field_error ? err_col : P::Muted();
+            ImFont* lf = MonoFont(9);
+            SpacedText(dl, lf, 9, ImVec2(wp.x + Sc(FX), wp.y + Sc(label_y + 6) - Fz(9) * 0.5f), A(lab), label, 1.5f);
+            const ImVec2 a = at(FX, fy), b = at(FX + FW, fy + FH);
+            dl->AddRectFilled(a, b, A(P::Card()), Sc(8));
+            if (loading) flags |= ImGuiInputTextFlags_ReadOnly;
+            ImGui::PushFont(font);
+            ImGui::SetWindowFontScale(Fz(14) / font->FontSize); // Fz already includes g_fs
+            ImGui::SetCursorScreenPos(a);
+            ImGui::SetNextItemWidth(Sc(FW - right_pad));
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(Sc(38), (std::max)(0.0f, (Sc(FH) - ImGui::GetFontSize()) * 0.5f)));
+            static ImGuiID refocus_id = 0; // field whose focus-activation select-all must be undone once
+            if (refocus) { ImGui::SetKeyboardFocusHere(); refocus_id = ImGui::GetID(id); } // after the eye click: keep typing
+            const bool enter = ImGui::InputTextWithHint(id, hint, buf, size, flags);
+            if (refocus_id != 0 && ImGui::GetItemID() == refocus_id && ImGui::IsItemActive()) {
+                if (ImGuiInputTextState* st = ImGui::GetInputTextState(refocus_id)) { // cursor to the end, nothing selected
+                    st->Stb.cursor = st->CurLenW;
+                    st->ClearSelection();
+                }
+                refocus_id = 0;
+            }
+            if (ImGui::IsItemEdited()) edited = true;
+            ImGui::PopStyleVar();
+            ImGui::SetWindowFontScale(g_fs);
+            ImGui::PopFont();
+            const float f = Anim(ImGui::GetID(id), ImGui::IsItemActive() ? 1.0f : 0.0f, 25.0f);
+            const ImU32 edge = field_error ? err_col : Mix(P::Border(), P::Accent(), f);
+            if (f > 0.01f) dl->AddRect(ImVec2(a.x - Sc(1.5f), a.y - Sc(1.5f)), ImVec2(b.x + Sc(1.5f), b.y + Sc(1.5f)), A(field_error ? err_col : P::Accent(), 0.14f * f), Sc(9.5f), 0, Sc(3));
+            dl->AddRect(a, b, A(edge), Sc(8), 0, Sc(1.0f + 0.5f * f));
+            IconC(dl, 14, a.x + Sc(12 + 7), (a.y + b.y) * 0.5f, A(field_error ? err_col : Mix(P::Muted(), P::Accent(), f)), icon);
+            return enter;
+        };
+        const bool show_err = error && !field_err_cleared;
+        static bool focus_pw = false; // set by the eye button, consumed by the next password field
+        field("USERNAME", 282, 300, ICON_FA_USER, "##orbit_user", "Enter username", v.username, v.username_size,
+              ImGuiInputTextFlags_CharsNoBlank, TextFont(14), 0.0f, show_err && err.field == 1);
+        ImGuiInputTextFlags pw_flags = ImGuiInputTextFlags_CharsNoBlank | ImGuiInputTextFlags_EnterReturnsTrue;
+        if (!*v.show_password) pw_flags |= ImGuiInputTextFlags_Password;
+        if (field("PASSWORD", 352, 370, ICON_FA_LOCK, "##orbit_pass", "Enter password", v.password, v.password_size, pw_flags,
+                  MonoFont(14, true), 44.0f, show_err && err.field == 2, focus_pw) && !loading)
+            submit = true;
+        focus_pw = false;
+        if (edited) field_err_cleared = true;
+        ImGui::PopStyleColor(6);
+        ImGui::PopStyleVar(2);
+
+        // eye button inside the password field (toggled state looks like hover)
+        {
+            const ImVec2 a = at(FX + FW - 6 - 32, 370 + (FH - 32) * 0.5f);
+            ImGui::SetCursorScreenPos(a);
+            if (ImGui::InvisibleButton("##orbit_eye", ImVec2(Sc(32), Sc(32))) && !loading) { *v.show_password = !*v.show_password; focus_pw = true; }
+            const float hv = Anim(ImGui::GetItemID(), (ImGui::IsItemHovered() || ImGui::IsItemActive() || *v.show_password) ? 1.0f : 0.0f, 25.0f);
+            dl->AddRectFilled(a, ImVec2(a.x + Sc(32), a.y + Sc(32)), A(P::Soft(), hv), Sc(6));
+            IconC(dl, 16, a.x + Sc(16), a.y + Sc(16), A(Mix(P::Muted(), P::Accent(), hv)), *v.show_password ? ICON_FA_EYE_SLASH : ICON_FA_EYE);
+        }
+        g_alpha = saved_alpha;
+
+        if (!loading && (GetKeyState(VK_CAPITAL) & 1)) {
+            ImFont* caps_font = MonoFont(9, true);
+            TextC(dl, caps_font, 9, wp.x + Sc(FX + FW) - TextSize(caps_font, 9, "CAPS ON").x, wp.y + Sc(433), A(P::Accent()), "CAPS ON");
+        }
+    }
+
+    // bottom: progress box while loading / opening, otherwise the submit button (intro: 1100-1600 ms; also drives the footer)
+    g_alpha = base * cf * ph(1.1f, 1.6f);
+    {
+        const ImVec2 a = at(FX, 456), b = at(FX + FW, 456 + 46);
+        ImGui::SetCursorScreenPos(a);
+        if (loading || success) {
+            ImGui::Dummy(ImVec2(Sc(FW), Sc(46)));
+            const ImU32 col = success ? P::Success() : P::Accent();
+            dl->AddRectFilled(a, b, A(P::Card()), Sc(10));
+            dl->AddRect(a, b, A(P::Border()), Sc(10), 0, 1.0f);
+            ImFont* lf = MonoFont(9, true);
+            const char* label = success ? (orbit_next ? "OPENING ORBIT" : "OPENING MENU") : "VERIFYING";
+            char right[16] = "WAIT";
+            if (success) std::snprintf(right, sizeof(right), "%.1f s", tsince);
+            const float px = a.x + Sc(14), rx = b.x - Sc(14);
+            TextC(dl, lf, 9, px, a.y + Sc(9 + 5), A(col), label);
+            TextC(dl, lf, 9, rx - TextSize(lf, 9, right).x, a.y + Sc(9 + 5), A(P::Muted()), right);
+            const float cw = (rx - px - Sc(3) * 19.0f) / 20.0f, cy1 = b.y - Sc(9), cy0 = cy1 - Sc(8);
+            const int head = static_cast<int>(now / 0.06) % 24; // 5-cell window, moves 60 ms per cell, slides out and wraps
+            const int filled = success ? static_cast<int>((total > 0.0f ? ImSaturate(tsince / total) : 1.0f) * 20.0f) : 0;
+            for (int i = 0; i < 20; ++i) {
+                const float x = px + i * (cw + Sc(3));
+                const bool is_head = loading && i == head, in_win = loading && i <= head && i > head - 5;
+                ImU32 c = P::Toggle();
+                if (success && i < filled) c = col;
+                else if (is_head) c = Theme::Current().hover;
+                else if (in_win) c = col;
+                if (is_head) GlowRect(dl, ImVec2(x, cy0), ImVec2(x + cw, cy1), Sc(2), 6.0f, Theme::Current().hover, 1.0f);
+                dl->AddRectFilled(ImVec2(x, cy0), ImVec2(x + cw, cy1), A(c), Sc(2));
+            }
+        } else if (!*v.intro_done) {
+            ImGui::Dummy(ImVec2(Sc(FW), Sc(46)));
+            ImFont* bf = TextFont(14, true);
+            dl->AddRectFilled(a, b, A(P::Card()), Sc(10));
+            dl->AddRect(a, b, A(P::Border()), Sc(10), 0, 1.0f);
+            TextC(dl, bf, 14, (a.x + b.x) * 0.5f - TextSize(bf, 14, "Sign in").x * 0.5f, (a.y + b.y) * 0.5f, A(P::Muted()), "Sign in");
+        } else {
+            ImFont* bf = TextFont(14, true);
+            if (ImGui::InvisibleButton("##orbit_submit", ImVec2(Sc(FW), Sc(46)))) submit = true;
+            const float hv = Anim(ImGui::GetItemID(), ImGui::IsItemHovered() ? 1.0f : 0.0f, 25.0f);
+            GlowRect(dl, a, b, Sc(10), 18.0f, P::Accent(), 0.35f + 0.65f * hv);
+            dl->AddRectFilled(a, b, A(Mix(P::Accent(), Theme::Current().hover, hv)), Sc(10));
+            const ImU32 on = A(Theme::Current().onAccent);
+            const char* label = err.retry ? "Retry" : "Sign in";
+            const float tw = TextSize(bf, 14, label).x, gap = Sc(8), iw = Fz(16), x0 = (a.x + b.x) * 0.5f - (tw + gap + iw) * 0.5f, cy = (a.y + b.y) * 0.5f;
+            TextC(dl, bf, 14, x0, cy, on, label);
+            IconC(dl, 16, x0 + tw + gap + iw * 0.5f, cy, on, err.retry ? ICON_FA_REDO_ALT : ICON_FA_SIGN_IN_ALT);
+        }
+    }
+
+    // footer (the return-arrow glyph is not in the Latin-1 text atlas: plain ASCII)
+    {
+        ImFont* ff = MonoFont(9);
+        TextC(dl, ff, 9, wp.x + Sc(FX), wp.y + Sc(522), A(P::Muted()), "ENTER = SUBMIT");
+        TextC(dl, ff, 9, wp.x + Sc(FX + FW) - TextSize(ff, 9, "END = UNLOAD").x, wp.y + Sc(522), A(P::Muted()), "END = UNLOAD");
+    }
+
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(4);
+    if (submit && !loading && !success && *v.intro_done) { // a fast failing retry must shake and restyle again
+        was_error = false;
+        seen_raw.clear();
+        field_err_cleared = false;
+    }
+    return submit;
 }
 
 } // namespace Orbit

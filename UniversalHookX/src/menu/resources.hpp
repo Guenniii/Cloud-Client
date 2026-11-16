@@ -23,6 +23,7 @@ namespace Menu::Resources {
     void SetupStyleAndFonts();
     ImTextureID LogoTexture();
     ImTextureID UserTexture();
+    bool HasUserAvatar(); // downloaded avatar uploaded; UserTexture() otherwise returns the default logo
     void RequestUserAvatar(const std::string& username);
     void UpdateAnimation(float deltaTime);
     void ReleaseTextures(bool vulkanTextures);
