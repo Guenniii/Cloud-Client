@@ -55,7 +55,7 @@ inline void Restore(const Snapshot& state) {
     Theme::animated_accent=state.ui[17]!=0;Theme::animation_period=state.ui[18];Theme::player_colors_enabled=state.ui[19]!=0;
     Theme::friend_rgb=state.ui[20];Theme::enemy_rgb=state.ui[21];
     Config::watermark_enabled=state.ui[22]!=0;Config::watermark_x=state.ui[23];Config::watermark_y=state.ui[24];
-    Config::menu_style=state.ui[25]>=0&&state.ui[25]<=2?state.ui[25]:1;
+    Config::menu_style=state.ui[25]>=0&&state.ui[25]<=2?state.ui[25]:2;
     OreSim::manualSeed=state.seed;OreSim::hasManualSeed=state.hasSeed;OreSim::seedError=state.seedError;
     OreSim::seedFromCracker=state.seedFromCracker;
     std::snprintf(OreSim::seedInput,sizeof(OreSim::seedInput),"%s",state.seedInput.c_str());

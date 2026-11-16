@@ -62,7 +62,7 @@ Bridge-Klassen über `SeedCracker::LoadExtensionClass(env, "phantomui.…")` lad
   `VisualModulesBridge.frame(int[])` erwartet genau 29 Werte (wird nicht automatisch geprüft).
 - **Profile**: `PhantomUI/configs/<name>.cfg` (relativ zum Arbeitsverzeichnis), Text `key=value`, erste Zeile `profile_version=2`,
   pro Modul `module.<name>.enabled|favorite|hotkey|hotkey_mode|<setting>=<int>`. Namen über `ValidName` (1–64 Zeichen).
-  Menüwahl `ui.menu_style=0|1|2` (Klassisch / Click GUI / Orbit, Standard 1, kein Autoload; `menu.cpp` `kMenus[]`).
+  Menüwahl `ui.menu_style=0|1|2` (Klassisch / Click GUI / Orbit, Standard 2, kein Autoload; `menu.cpp` `kMenus[]`).
   Freunde: `bin/friends.txt` neben der DLL (max. 128).
 - **Share-Codes**: Config `CC-CONFIG1.<base64url ohne Padding>.<FNV-1a 8 hex>`, Payload tab-getrennt (`client-config\t1`, `theme`, `module`).
   Theme `CC-THEME1|preset|…|CHECKSUM`. Import immer `Inspect` (nur prüfen) → `Apply` (legt Backup-Profil `before-import-…` an). Dateien `*.ccfg`.

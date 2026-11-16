@@ -779,7 +779,7 @@ namespace Menu {
                 open_alpha = 0;
 
             if (open_alpha > 0.01f) {
-                // Menu selection (Config::menu_style, saved in the profile): 0 classic, 1 Click GUI (default), 2 Orbit.
+                // Menu selection (Config::menu_style, saved in the profile): 0 classic, 1 Click GUI, 2 Orbit (default).
                 // All three are always compiled; the style is read once per frame, so a change made inside the settings
                 // page takes effect on the next frame.
                 static void (*const kMenus[])() = { DrawPhantomMenu, ClickGui::Draw, Orbit::Draw };

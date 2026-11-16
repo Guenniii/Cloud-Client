@@ -86,7 +86,7 @@ Prüfsummen gesichert. Git-Commits werden nicht automatisch veröffentlicht.
 
 ## Click-GUI (ClickGui::Draw, Settings > Menu style = Click GUI)
 
-- Select "Click GUI" in Settings > Menu style (default after injection) and open the menu in OpenGL and Vulkan. Switch to "Classic": the classic menu must look and behave as before (search, favorites, Only active, Collapse, Undo, hotkey badge, reset, OreSim seed).
+- Select "Click GUI" in Settings > Menu style and open the menu in OpenGL and Vulkan. Switch to "Classic": the classic menu must look and behave as before (search, favorites, Only active, Collapse, Undo, hotkey badge, reset, OreSim seed).
 - Sidebar: tabs with count badge (= enabled modules), gliding active pill, hover states; CLIENT tabs open Settings, Themes, Profiles, Friends, SeedCracker; profile chip shows the active profile. Page change cross-fades.
 - Menu size 80 / 100 / 120 %: layout scales; below 760 px width the sidebar shows icons only (dot badge, label tooltip) and settings use one column. Check on a small screen/window too.
 - Header: title, "N of M enabled", search (all categories, case-insensitive, also finds setting names), Favorites filter. Cards scroll with the mouse wheel; off-screen cards cost no frame time.
@@ -97,8 +97,8 @@ Prüfsummen gesichert. Git-Commits werden nicht automatisch veröffentlicht.
 
 ## Orbit (Orbit::Draw, Settings > Menu style)
 
-- Menu style: the row "Menu style" (Classic / Click GUI / Orbit) on the Settings page exists in all three menus; clicking switches on the next frame without flicker or stuck windows (window IDs are separate). Default after injection: Click GUI.
-- Profile: save a profile with Orbit active, load it in another style: Orbit returns. Load a profile without `ui.menu_style` (old build) or with an invalid value: Click GUI. `profile_version` stays 2. Undo after a profile load restores the previous menu style. Share-code export/import is unchanged; the `before-import-...` backup profile contains `ui.menu_style`.
+- Menu style: the row "Menu style" (Classic / Click GUI / Orbit) on the Settings page exists in all three menus; clicking switches on the next frame without flicker or stuck windows (window IDs are separate). Default after injection: Orbit.
+- Profile: save a profile with Orbit active, load it in another style: Orbit returns. Load a profile without `ui.menu_style` (old build) or with an invalid value: Orbit. `profile_version` stays 2. Undo after a profile load restores the previous menu style. Share-code export/import is unchanged; the `before-import-...` backup profile contains `ui.menu_style`.
 - Window: 900 x 600 scaled by menu size 80 / 100 / 120 % (and fitted to small displays), draggable by empty areas (gaps, centre, corners), fade-in on open, ring turns -20 deg to 0, particles and border like the Click GUI. OpenGL and Vulkan.
 - Themes: light and dark presets, custom accent, animated accent, gradient, menu glow 0 / 100 / 200 %: all colours follow, glow reacts.
 - Navigation: ring segments (hover, selected, click on segment and label), counters "0N ON", tick ring (one tick per module, lit when enabled), centre disc "online / total", dock buttons with tooltip pill, profile bar shows the active profile, dashed divider. All five client pages open in the right zone at 80 / 100 / 120 % without horizontal scroll or overlapping elements (Settings, Themes, Profiles, Friends, SeedCracker).

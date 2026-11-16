@@ -162,7 +162,7 @@ namespace Config {
         Theme::menu_glow_percent = Theme::esp_glow_percent = 100;
         menu_size_percent = 100;
         font_size_percent = 100;
-        menu_style = 1; // profiles without the key (older builds) fall back to the Click GUI
+        menu_style = 2; // profiles without the key (older builds) fall back to Orbit
         bool seedPresent=false;
         long long profileSeed=0;
         bool invalidSeed=false;
@@ -268,7 +268,7 @@ namespace Config {
             }
             if (key == "ui.menu_style") {
                 int style = 1;
-                menu_style = (ParseNumber(val, style) && style >= 0 && style <= 2) ? style : 1; // unknown values -> Click GUI
+                menu_style = (ParseNumber(val, style) && style >= 0 && style <= 2) ? style : 2; // unknown values -> Orbit
                 continue;
             }
             if (key == "particles") {

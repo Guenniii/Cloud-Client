@@ -59,7 +59,7 @@ namespace Config {
     // ---- Globale App-Settings (Settings-Tab) ----
     extern std::atomic<int> menu_keybind;        // Taste zum Oeffnen/Schliessen des Menues
     extern bool particles_enabled;  // Partikel-Hintergrund an/aus
-    inline int menu_style = 2;      // 0 = klassisches Menue, 1 = Click GUI (Standard), 2 = Orbit; nur Render-Thread
+    inline int menu_style = 2;      // 0 = klassisches Menue, 1 = Click GUI, 2 = Orbit (Standard); nur Render-Thread
     extern std::atomic<bool> capturing_menu_key; // true waehrend auf einen neuen Menue-Hotkey gewartet wird
 
     // ---- Config-Datei-Verwaltung (Config-Tab) ----
