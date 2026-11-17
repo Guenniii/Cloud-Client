@@ -112,17 +112,7 @@ void DrawSettingsPage(ImDrawList* draw_list, ImVec2 area_min, float area_w, floa
     ImGui::SetCursorScreenPos(ImVec2(area_min.x+area_w-170,unloadY));
     if(DrawRoundedButton(draw_list,"##unload_client","Unload DLL",ImVec2(150,36),
         Menu::Palette::Soft(),Theme::Current().border,Menu::Palette::Accent(),alpha,8)) Base::Unload();
-    float hudY=unloadY+70;
-    draw_list->AddLine(ImVec2(area_min.x+20,hudY),ImVec2(area_max.x-20,hudY),ColA(Menu::Palette::Border(),alpha));
-    draw_list->AddText(ImVec2(area_min.x+20,hudY+16),ColA(Menu::Palette::Label(),alpha),"Info HUD");
-    draw_list->AddText(ImVec2(area_min.x+20,hudY+39),ColA(Menu::Palette::Muted(),alpha),"Drag its header while the menu is open. Position is saved in profiles.");
-    ImGui::SetCursorScreenPos(ImVec2(area_max.x-160,hudY+10));
-    if(DrawRoundedButton(draw_list,"##reset_hud","Reset",ImVec2(80,28),Menu::Palette::Soft(),Menu::Palette::Border(),Menu::Palette::Accent(),alpha,6)) {
-        Config::hud_x=20; Config::hud_y=20;
-    }
-    ImGui::SetCursorScreenPos(ImVec2(area_max.x-58,hudY+14));
-    CustomToggle("##hud_enabled",&Config::hud_enabled,alpha,38,21);
-    const float watermarkY=hudY+76;
+    const float watermarkY=unloadY+70;
     draw_list->AddLine(ImVec2(area_min.x+20,watermarkY),ImVec2(area_max.x-20,watermarkY),ColA(Menu::Palette::Border(),alpha));
     draw_list->AddText(ImVec2(area_min.x+20,watermarkY+16),ColA(Menu::Palette::Label(),alpha),"Logo watermark");
     draw_list->AddText(ImVec2(area_min.x+20,watermarkY+39),ColA(Menu::Palette::Muted(),alpha),"Logo only. Drag it while the menu is open.");

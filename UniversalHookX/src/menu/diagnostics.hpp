@@ -24,7 +24,7 @@ inline std::string Report() {
         << ' ' << time.wHour << ':' << time.wMinute << ':' << time.wSecond << "\n"
         << "Renderer: " << U::RenderingBackendToStr() << "\n"
         << "Theme: " << Theme::Current().name << "\n"
-        << "HUD: " << Config::hud_enabled << " at " << Config::hud_x << ',' << Config::hud_y << "\n"
+        << "Info HUD: " << InfoHUD_Enabled.load() << " at " << Config::hud_x << ',' << Config::hud_y << "\n"
         << "Menu key (Windows VK): " << Config::menu_keybind.load() << "\n"
         << "OreSim seed configured: " << OreSim::hasManualSeed << "\n\n"
         << "Render-thread preparation timings (ms); no GPU/background job timings.\n"

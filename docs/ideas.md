@@ -5,7 +5,7 @@ Pfade: `src/` = `UniversalHookX/src/`, `java/` = `SeedcrackerX-master/src/main/j
 
 **Pflichtstellen für jedes neue Modul (geprüft)**
 - **C++-Karte:** Flags in `src/modules/settings.hpp`; Karte in `src/menu/module_registry.cpp:17-254` und `MODULE_COUNT` (`:13`, fest 34) mitziehen. Zu klein ergibt einen Compile-Fehler, zu groß einen Null-Eintrag und Crash.
-- **C++-Listen:** Beschreibung (`module_registry.cpp:287-327`), Icon (`src/menu/menu.cpp:79ff`), Labels (`src/utils/config/settings_text.hpp`), Status-HUD (`src/menu/status_hud.hpp:15-24`), Diagnose (`Report` in `src/menu/diagnostics.hpp`).
+- **C++-Listen:** Beschreibung (`module_registry.cpp:287-327`), Icon (`src/menu/menu.cpp:79ff`), Labels (`src/utils/config/settings_text.hpp`), Diagnose (`Report` in `src/menu/diagnostics.hpp`).
 - **UtilitySuite-Option:** in `src/input/assist_options.hpp` und `java/assist/AssistOptions.java` anhängen (COUNT mitziehen, Clamp in `snapshot`); genau eine Zuweisung in `src/input/utility_suite.hpp:66-91` (prüft `check_protocol`).
 - **UtilitySuite-Instanz:** eine `AssistModule`-Instanz anlegen (`src/modules/utility/assist_modules.cpp:13-17`, `runtime_modules.hpp`, `ModuleManager.cpp:25-29`). Ohne sie ruft niemand `Publish`, wenn nur das neue Modul aktiv ist.
 - **Neuer Hotbar-Owner:** enum (`java/movement/HotbarCoordinator.java:15`), `name()`-switch (exhaustiv, Compile-Fehler wenn vergessen), `mayPreempt`, Cancel-Liste in `UtilitySuiteBridge.clear()` (`:48-53`).

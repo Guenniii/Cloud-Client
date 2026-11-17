@@ -49,7 +49,6 @@ namespace Config {
     }
     inline std::atomic<int> menu_size_percent{100};
     inline std::atomic<int> font_size_percent{100};
-    inline bool hud_enabled=false;
     inline bool watermark_enabled=true;
     inline int watermark_x=-1,watermark_y=20; // -1 anchors the initial position to the right.
     inline int hud_x=20, hud_y=20;

@@ -30,13 +30,8 @@ inline ImU32 Fade(ImU32 c, float a) {
 
 inline void Draw() {
     if (!used) return;
-    // Orbit bold face closest to 14 px; falls back to the legacy font when Orbit fonts failed to load.
-    int best = -1;
-    for (int i = 0; i < orbit_text_bold.count; ++i)
-        if (orbit_text_bold.font[i] && (best < 0 || std::abs(orbit_text_bold.size[i] - 14.f) < std::abs(orbit_text_bold.size[best] - 14.f)))
-            best = i;
-    ImFont* font = best >= 0 ? orbit_text_bold.font[best] : (poppins ? poppins : ImGui::GetFont());
-    const float size = best >= 0 ? orbit_text_bold.size[best] : ImGui::GetFontSize();
+    float size = 0.f;
+    ImFont* font = NearestOrbitFont(orbit_text_bold, 14.f, &size);
     const auto& p = Theme::Current();
     const auto* vp = ImGui::GetMainViewport();
     auto* dl = ImGui::GetBackgroundDrawList();

@@ -110,6 +110,7 @@ inline const char* ModuleIcon(const ModuleData& module) {
         {"SeedCracker", ICON_FA_SEEDLING},
         {"OreSim", ICON_FA_CUBES},
         {"Player ESP", ICON_FA_EYE},
+        {"Info HUD", ICON_FA_LIST},
     };
     for (const auto& entry : entries) if (std::string_view(module.name) == entry.name) return entry.icon;
     return module.category == 0 ? ICON_FA_CROSSHAIRS : module.category == 1 ? ICON_FA_WIND : module.category == 3 ? ICON_FA_EYE : ICON_FA_HAMMER;

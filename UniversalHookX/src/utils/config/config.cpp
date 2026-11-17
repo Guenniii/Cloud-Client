@@ -67,7 +67,6 @@ namespace Config {
         file << "profile_version=2\n";
         file << "ui.menu_size=" << menu_size_percent.load() << "\n";
         file << "ui.font_size=" << font_size_percent.load() << "\n";
-        file << "hud.enabled=" << (hud_enabled ? 1 : 0) << "\n";
         file << "hud.x=" << hud_x << "\n";
         file << "hud.y=" << hud_y << "\n";
         file << "watermark.enabled=" << (watermark_enabled ? 1 : 0) << "\n";
@@ -153,7 +152,7 @@ namespace Config {
             modules[i].favorite = false;
         }
         hotkey_toasts=true;
-        hud_enabled=false;watermark_enabled=true;watermark_x=-1;watermark_y=20;
+        watermark_enabled=true;watermark_x=-1;watermark_y=20;
         Theme::gradient_enabled=false;Theme::animated_accent=false;Theme::player_colors_enabled=false;
         Theme::secondary_rgb=0xF459D5;Theme::gradient_strength=18;Theme::animation_period=8;
         Theme::friend_rgb=0x4BDBB7;Theme::enemy_rgb=0xF4597B;
@@ -200,8 +199,8 @@ namespace Config {
                 if(ParseNumber(val,position))(key=="watermark.x"?watermark_x:watermark_y)=std::clamp(position,key=="watermark.x"?-1:0,32768);
                 continue;
             }
-            if (key == "hud.enabled") {
-                if(val=="0" || val=="1") hud_enabled=val=="1";
+            if (key == "hud.enabled") { // legacy key; a later module.Info HUD.enabled line wins
+                if(val=="0" || val=="1") InfoHUD_Enabled=val=="1";
                 continue;
             }
             if (key == "hud.x" || key == "hud.y") {

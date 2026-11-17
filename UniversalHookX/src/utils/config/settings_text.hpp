@@ -120,6 +120,7 @@ inline const char* English(const char* key){
         {"Quarz","Quartz"},
         {"Antiker Schutt","Ancient debris"},
         {"Skin statt Boxen","Player skins instead of boxes"},
+        {"FPS und Uhrzeit","FPS and clock"},
     };
     for(const auto& entry:entries)if(entry.key==key)return entry.label;
     return key;

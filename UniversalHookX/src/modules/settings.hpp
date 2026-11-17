@@ -153,6 +153,8 @@ inline std::atomic<int> StorageESP_Range=64,StorageESP_LineWidth=2;
 
 inline std::atomic<bool> TargetHUD_Enabled=false,TargetHUD_Mini=false,TargetHUD_Glow=true,TargetHUD_Details=true,TargetHUD_Preview=true;
 inline std::atomic<int> TargetHUD_Hold=1500,TargetHUD_Scale=100,TargetHUD_X=56,TargetHUD_Y=62;
+inline std::atomic<bool> InfoHUD_Enabled=false,InfoHUD_Clock=true;
+inline std::atomic<int> InfoHUD_Scale=100;
 
 inline std::atomic<int> SeedCracker_Radius=4,SeedCracker_BoxWidth=2;
 // Applies the SeedCracker result to the ore simulation automatically.

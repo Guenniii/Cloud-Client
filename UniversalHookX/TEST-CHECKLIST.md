@@ -145,3 +145,18 @@ Spezifikation: `../docs/login-orbit-design.md`. Umschalten über `constexpr int 
 - [ ] Aktionstasten: Short Wind Charge, Auto Pearl Catch und Key Pearl loesen auf Tastendruck aus, TOG/HOLD ist in Klassisch, Click GUI und Orbit bei allen dreien ausgeblendet.
 - [ ] Key Pearl (Bridge-JAR neu, Minecraft neu starten): Hotkey wirft eine Perle in Blickrichtung (Pitch unveraendert); mit Hotbar spoofing ohne sichtbaren Slotwechsel; ohne Perle Console-Hinweis; bei offenem Menue/Screen nichts; waehrend einer Auto-Pearl-Catch-Sequenz "still pending".
 - [ ] Totem Warner (OpenGL und Vulkan): "NO TOTEM" ueber Gegnern ohne Totem in Haupt-/Nebenhand; weg, sobald ein Totem gehalten wird; keine Labels fuer sich selbst, Freunde und AntiBot-gefilterte Spieler; Reichweiten-Slider wirkt; andere Visual-Module unveraendert (Laengenpruefung 31).
+
+## Info HUD (ersetzt das Status-HUD)
+
+- [ ] Karte "Info HUD" in Visuals (Klassisch, Click GUI, Orbit); Hotkey Toggle zeigt Toast "Info HUD on/off" und blendet das HUD ein/aus; Hold-Modus funktioniert.
+- [ ] Liste: Info HUD steht nie selbst darin; jedes andere aktive Modul erscheint (u. a. Friends, Key Pearl, Reach, FastPlace); Sortierung nach Textbreite; ohne aktive Module "No active modules".
+- [ ] Animation: Zeilen gleiten/blenden beim Ein- und Ausschalten, nach einem Ruckler springt nichts, Breite folgt weich.
+- [ ] Bedienung: bei offenem Menue das ganze Panel ziehbar, bei geschlossenem Menue gehen Klicks ins Spiel; klemmt am Bildschirmrand, auch nach Fenster-Resize.
+- [ ] Optik: Groesse 75/100/150 %, "FPS and clock" an/aus, helle/dunkle Themes, Custom Accent, Fallback ohne Orbit-Fonts, OpenGL und Vulkan, Unload (End) ohne Absturz.
+- [ ] Profil: Speichern enthaelt `module.Info HUD.*` und `hud.x/y`, kein `hud.enabled`; Altprofil mit `hud.enabled=1` = HUD an, `0`/fehlend = aus; Laden setzt die Position.
+- [ ] Undo: Karte schalten = ein Schritt; Ziehen = ein Schritt nach dem Loslassen.
+- [ ] Share-Code: Export/Import enthaelt die Karte; ohne Option "enabled" ist das HUD danach aus.
+- [ ] Settings-Seite: Zeile "Info HUD" ist weg; Unload-, Watermark- und Runtime-Zeilen ueberlappen nicht (Orbit 80/100/120 %).
+- [ ] Diagnose-Report zeigt "Info HUD: ...".
+- [ ] Position: HUD buendig oben rechts und unten rechts, Module schalten und FPS ueber 99/100 wechseln lassen: keine Drift; ein Undo nach einem Karten-Toggle nimmt genau den Toggle zurueck.
+- [ ] Altprofil mit `hud.enabled=1` und `module.Info HUD.enabled=0` laedt mit HUD aus.

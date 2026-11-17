@@ -11,7 +11,7 @@
 
 namespace Menu::Registry {
 namespace {
-constexpr int MODULE_COUNT = 37;
+constexpr int MODULE_COUNT = 38;
 
 // Bind card hotkeys to the primary runtime feature, not unused UI flags.
 
@@ -263,6 +263,10 @@ static ModuleData modules[MODULE_COUNT] = {
     {"Totem Warner", 0, 0, &TotemWarner_Enabled, 3, {
         {"Reichweite", SettingType::SliderInt, nullptr, &TotemWarner_Range, 8, 128, " m"},
     }},
+    {"Info HUD", 0, 0, &InfoHUD_Enabled, 3, {
+        {"FPS und Uhrzeit", SettingType::Checkbox, &InfoHUD_Clock},
+        {"Groesse", SettingType::SliderInt, nullptr, &InfoHUD_Scale, 75, 150, " %"},
+    }},
 };
 
 // Capture factory settings once, before profiles or runtime actions can change them.
@@ -335,7 +339,8 @@ const char* Description(const char* name) {
         {"AutoTotem", "Maintains totem protection using available inventory items."},
         {"SeedCracker", "Collects structure data, verifies candidate world seeds and hands them to the ore simulation."},
         {"OreSim", "Predicts ore locations using the world seed entered manually."},
-        {"Player ESP", "Highlights players using boxes or the configured skin rendering."}
+        {"Player ESP", "Highlights players using boxes or the configured skin rendering."},
+        {"Info HUD", "Lists all other active modules, plus FPS and clock. Drag it while the menu is open; the position is saved in profiles."}
     };
     for (const auto& [key, text] : descriptions) if (key == name) return text;
     return "Configure the behavior of this module below.";

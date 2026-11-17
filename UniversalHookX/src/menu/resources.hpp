@@ -1,4 +1,5 @@
 #pragma once
+#include <cmath>
 #include <string>
 #include "../dependencies/imgui/imgui.h"
 
@@ -18,6 +19,14 @@ extern OrbitFace orbit_text;
 extern OrbitFace orbit_text_bold;
 extern OrbitFace orbit_mono;
 extern OrbitFace orbit_mono_bold;
+// Loaded size of `face` closest to px (static atlas); falls back to the legacy font when Orbit fonts failed to load.
+inline ImFont* NearestOrbitFont(const OrbitFace& face, float px, float* outSize) {
+    int best = -1;
+    for (int i = 0; i < face.count; ++i)
+        if (face.font[i] && (best < 0 || std::abs(face.size[i] - px) < std::abs(face.size[best] - px))) best = i;
+    if (outSize) *outSize = best >= 0 ? face.size[best] : ImGui::GetFontSize();
+    return best >= 0 ? face.font[best] : (poppins ? poppins : ImGui::GetFont());
+}
 
 namespace Menu::Resources {
     void SetupStyleAndFonts();

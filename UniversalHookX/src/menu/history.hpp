@@ -28,7 +28,7 @@ inline Snapshot Capture() {
     state.ui={Theme::selected,Theme::custom_accent_enabled.load(),Theme::custom_accent_rgb.load(),
         Theme::menu_glow_percent.load(),Theme::esp_glow_percent.load(),Config::menu_size_percent.load(),
         Config::font_size_percent.load(),Config::menu_keybind.load(),Config::particles_enabled,
-        Config::hud_enabled,Config::hud_x,Config::hud_y,Theme::custom_background_enabled.load(),Theme::custom_background_rgb.load(),
+        0 /* was hud_enabled, slot kept */,Config::hud_x,Config::hud_y,Theme::custom_background_enabled.load(),Theme::custom_background_rgb.load(),
         Theme::gradient_enabled.load(),Theme::secondary_rgb.load(),Theme::gradient_strength.load(),Theme::animated_accent.load(),
         Theme::animation_period.load(),Theme::player_colors_enabled.load(),Theme::friend_rgb.load(),Theme::enemy_rgb.load(),Config::watermark_enabled,Config::watermark_x,Config::watermark_y,Config::menu_style,Config::hotkey_toasts};
     state.seed=OreSim::manualSeed;state.hasSeed=OreSim::hasManualSeed;
@@ -49,7 +49,7 @@ inline void Restore(const Snapshot& state) {
     Theme::selected=state.ui[0];Theme::custom_accent_enabled=state.ui[1]!=0;Theme::custom_accent_rgb=state.ui[2];
     Theme::menu_glow_percent=state.ui[3];Theme::esp_glow_percent=state.ui[4];
     Config::menu_size_percent=state.ui[5];Config::font_size_percent=state.ui[6];Config::menu_keybind=state.ui[7];
-    Config::particles_enabled=state.ui[8]!=0;Config::hud_enabled=state.ui[9]!=0;Config::hud_x=state.ui[10];Config::hud_y=state.ui[11];
+    Config::particles_enabled=state.ui[8]!=0;Config::hud_x=state.ui[10];Config::hud_y=state.ui[11];
     Theme::custom_background_enabled=state.ui[12]!=0;Theme::custom_background_rgb=state.ui[13];
     Theme::gradient_enabled=state.ui[14]!=0;Theme::secondary_rgb=state.ui[15];Theme::gradient_strength=state.ui[16];
     Theme::animated_accent=state.ui[17]!=0;Theme::animation_period=state.ui[18];Theme::player_colors_enabled=state.ui[19]!=0;
