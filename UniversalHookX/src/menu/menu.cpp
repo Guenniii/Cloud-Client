@@ -6,6 +6,7 @@
 #include "../input/visual_modules.hpp"
 #include "../input/friends.hpp"
 #include "status_hud.hpp"
+#include "hotkey_toasts.hpp"
 #include "target_hud.hpp"
 #include "performance.hpp"
 #include "login.hpp"
@@ -738,7 +739,7 @@ namespace Menu {
         TargetHUD_Enabled=false;
         SeedCracker_Enabled=false;OreSim_Enabled=false;PlayerESP_Enabled=false;EchoTrail_Enabled=false;LootBeacon_Enabled=false;
         EchoTrail::Clear();
-        ProjectilePrediction_Enabled=false;SoundESP_Enabled=false;StorageESP_Enabled=false;ItemESP_Enabled=false;ExplosionPreview_Enabled=false;
+        ProjectilePrediction_Enabled=false;SoundESP_Enabled=false;StorageESP_Enabled=false;ItemESP_Enabled=false;ExplosionPreview_Enabled=false;TotemWarner_Enabled=false;
         AutoArmor_Enabled=false;Refill_Enabled=false;HitEffect_Enabled=false;PredictDoubleHand_Enabled=false;ShieldBreaker_Enabled=false;TriggerBot_Enabled=false;
         if(auto env=SeedCracker::GetMinecraftJNIEnv()) {
             ShipwreckESP::Shutdown(env);
@@ -771,6 +772,7 @@ namespace Menu {
         // re-checked: the frame Login::Render flips logged_in already draws the menu (no blank frame after the morph)
         if (Login::IsLoggedIn()) {
             StatusHud::Draw();
+            HotkeyToasts::Draw(); // always drawn (background list); hotkeys only fire with the menu closed
             if (Menu_Enabled && Config::menu_style == 2 && Orbit::TakesLoginHandoff())
                 open_alpha = 1.0f;
             else if (Menu_Enabled)

@@ -43,7 +43,7 @@ inline void Clear(JNIEnv* env,bool shutdown=false) {
     values.clear();
 }
 inline void Render() {
-    bool enabled=(ProjectilePrediction_Enabled || SoundESP_Enabled || StorageESP_Enabled || ItemESP_Enabled || LootBeacon_Enabled || ExplosionPreview_Enabled) && !Menu_Enabled;
+    bool enabled=(ProjectilePrediction_Enabled || SoundESP_Enabled || StorageESP_Enabled || ItemESP_Enabled || LootBeacon_Enabled || ExplosionPreview_Enabled || TotemWarner_Enabled) && !Menu_Enabled;
     DWORD pid=0;GetWindowThreadProcessId(GetForegroundWindow(),&pid);enabled &= pid==GetCurrentProcessId();
     auto env=SeedCracker::GetMinecraftJNIEnv();if(!env || env->ExceptionCheck())return;
     std::lock_guard lock(mutex);
@@ -56,12 +56,13 @@ inline void Render() {
     const LootBeaconRules::Selection itemSelection{ItemESP_Enabled.load(),ItemESP_Range.load(),{ItemESP_Totems.load(),ItemESP_Equipment.load(),ItemESP_Other.load()}};
     const LootBeaconRules::Selection beaconSelection{LootBeacon_Enabled.load(),LootBeacon_Range.load(),{LootBeacon_Totems.load(),LootBeacon_Equipment.load(),LootBeacon_Other.load()}};
     const auto scan=LootBeaconRules::Merge(itemSelection,beaconSelection);
-    // ABI: 29 visual options. Java validates the exact length; combat options remain independent.
-    std::array<jint,29> options={ProjectilePrediction_Enabled.load(),ProjectilePrediction_Held.load(),ProjectilePrediction_Flying.load(),ProjectilePrediction_Range.load(),ProjectilePrediction_Ticks.load(),
+    // ABI: 31 visual options. Java validates the exact length; combat options remain independent.
+    std::array<jint,31> options={ProjectilePrediction_Enabled.load(),ProjectilePrediction_Held.load(),ProjectilePrediction_Flying.load(),ProjectilePrediction_Range.load(),ProjectilePrediction_Ticks.load(),
         SoundESP_Enabled.load(),SoundESP_Steps.load(),SoundESP_Projectiles.load(),SoundESP_Explosions.load(),SoundESP_Range.load(),SoundESP_Lifetime.load(),
         StorageESP_Enabled.load(),StorageESP_Range.load(),StorageESP_Chests.load(),StorageESP_Barrels.load(),StorageESP_Shulkers.load(),StorageESP_EnderChests.load(),
         scan.enabled,scan.range,scan.groups[0],scan.groups[1],scan.groups[2],ItemESP_Enabled.load() && ItemESP_Labels.load(),
-        ExplosionPreview_Enabled.load(),ExplosionPreview_Range.load(),ExplosionPreview_Crystals.load(),ExplosionPreview_Anchors.load(),ExplosionPreview_Target.load(),AntiBot_Enabled.load()};
+        ExplosionPreview_Enabled.load(),ExplosionPreview_Range.load(),ExplosionPreview_Crystals.load(),ExplosionPreview_Anchors.load(),ExplosionPreview_Target.load(),AntiBot_Enabled.load(),
+        TotemWarner_Enabled.load(),TotemWarner_Range.load()};
     auto config=env->NewIntArray(static_cast<jsize>(options.size()));if(!Check(env) || !config)return;
     env->SetIntArrayRegion(config,0,static_cast<jsize>(options.size()),options.data());if(!Check(env))return;
     auto data=static_cast<jdoubleArray>(env->CallStaticObjectMethod(bridge,frame,config));if(!Check(env) || !data)return;

@@ -4,6 +4,7 @@
 #include "../../utils/sdk/CMinecraft.h"
 #include "../../utils/lifecycle/lifecycle.hpp"
 #include "../settings.hpp"
+#include "../../input/game_screen.hpp"
 #include <Windows.h>
 #include <algorithm>
 #include <cmath>
@@ -235,7 +236,7 @@ void CwCrystal::TickLoop( ) {
                                                "()Lnet/minecraft/world/item/Item;");
 
 
-        if (!c_EntityHitResult || !c_EndCrystalEntity || !f_player || !f_level || !f_gameMode || !f_hitResult || !f_inventory || !f_items || !m_listSize || !m_listGet || !m_getItem || !END_CRYSTAL_ITEM || !m_getEntity || !m_attackEntity || !MAIN_HAND) {
+        if (!c_EntityHitResult || !c_EndCrystalEntity || !f_player || !f_level || !f_gameMode || !f_hitResult || !p_mc->m_get_main_hand_item || !m_getItem || !END_CRYSTAL_ITEM || !m_getEntity || !m_attackEntity) {
             printf("[-] CwCrystal: Critical field IDs missing, aborting!\n");
 
             return;
@@ -244,6 +245,8 @@ void CwCrystal::TickLoop( ) {
         printf("[+] CwCrystal: Entering tick loop\n");
 
         ULONGLONG lastAttack = 0;
+        jint lastId = -1;
+        jmethodID m_getId = SafeGetMethod(c_EndCrystalEntity, "getId", "()I");
         while (!Lifecycle::requested) {
             Sleep(5);
             std::lock_guard lock(m_tickMutex);
@@ -271,32 +274,29 @@ void CwCrystal::TickLoop( ) {
             // GLFW direkt aus nativem Context aufrufen
             // (funktioniert da wir im gleichen Prozess sind)
             // RMB = Button 1
-            if ((GetAsyncKeyState(VK_RBUTTON) & 0x8000) == 0) {
+            // Wie HitCrystal::Allowed: Menue zu, Spiel im Fokus, kein Screen offen.
+            DWORD fgProcess = 0;
+            GetWindowThreadProcessId(GetForegroundWindow( ), &fgProcess);
+            if ((GetAsyncKeyState(VK_RBUTTON) & 0x8000) == 0 || Menu_Enabled || fgProcess != GetCurrentProcessId( ) ||
+                Input::GameScreenOpen(env, mc)) {
                 env->DeleteLocalRef(player);
                 env->DeleteLocalRef(world);
                 continue;
             }
 
-            // ── Hat Spieler END_CRYSTAL? ──
-            jobject inventory = api.GetObjectField(player, f_inventory);
-            jobject itemsList = api.GetObjectField(inventory, f_items);
+            // ── Kristall in der Haupthand? ──
             bool hasEndCrystal = false;
-            if (!itemsList) continue;
-            jint slotCount = env->CallIntMethod(itemsList, m_listSize);
-            if (env->ExceptionCheck()) continue;
-
-            for (jint i = 0; i < slotCount && !hasEndCrystal; i++) {
-                jobject stack = api.CallObjectMethod(itemsList, m_listGet, i);
-                if (!stack)
-                    continue;
-                jobject item = api.CallObjectMethod(stack, m_getItem);
-                if (env->IsSameObject(item, END_CRYSTAL_ITEM))
-                    hasEndCrystal = true;
-                env->DeleteLocalRef(item);
-                env->DeleteLocalRef(stack);
+            if (p_mc->m_get_main_hand_item) {
+                jobject stack = env->CallObjectMethod(player, p_mc->m_get_main_hand_item);
+                if (!env->ExceptionCheck( ) && stack) {
+                    jobject item = api.CallObjectMethod(stack, m_getItem);
+                    hasEndCrystal = item && env->IsSameObject(item, END_CRYSTAL_ITEM);
+                    if (item)
+                        env->DeleteLocalRef(item);
+                }
+                if (stack)
+                    env->DeleteLocalRef(stack);
             }
-            env->DeleteLocalRef(itemsList);
-            env->DeleteLocalRef(inventory);
 
             if (!hasEndCrystal) {
                 env->DeleteLocalRef(player);
@@ -319,51 +319,25 @@ void CwCrystal::TickLoop( ) {
                 jobject entity = api.CallObjectMethod(hitResult, m_getEntity);
                 if (entity && env->IsInstanceOf(entity, c_EndCrystalEntity)) {
                     const int d = std::clamp(CW_Delay.load( ), 0, 4);
-                    if (!d || GetTickCount64( ) - lastAttack >= d * 50ULL) {
+                    jint id = m_getId ? env->CallIntMethod(entity, m_getId) : -1;
+                    if (env->ExceptionCheck( )) {
+                        env->ExceptionClear( );
+                        id = -1;
+                    }
+                    // Gleicher (oder unbekannter) Kristall: mindestens 50 ms Pause, bis der Server ihn entfernt.
+                    const bool sameRecent = (id == -1 || id == lastId) && GetTickCount64( ) - lastAttack < 50;
+                    if (!sameRecent && (!d || GetTickCount64( ) - lastAttack >= d * 50ULL)) {
                         if (gameMode)
                             env->CallVoidMethod(gameMode, m_attackEntity, player, entity);
                         if (!env->ExceptionCheck())
                             p_mc->Swing(env,player);
                         lastAttack = GetTickCount64( );
+                        lastId = id;
                     }
                 }
                 if (entity)
                     env->DeleteLocalRef(entity);
             }
-            // ── Case 2: BlockHitResult ──
-//            else if (env->IsInstanceOf(hitResult, c_BlockHitResult)) {
-//                jobject blockPos = api.CallObjectMethod(hitResult, m_getBlockPos);
-//                jobject blockPosDown = api.CallObjectMethod(blockPos, m_blockPosDown);
-//
-//                jobject stateBelow = api.CallObjectMethod(world, m_getBlockState, blockPosDown);
-//                jobject stateTarget = api.CallObjectMethod(world, m_getBlockState, blockPos);
-//
-//                jobject blockBelow = api.CallObjectMethod(stateBelow, m_getBlock);
-//                jobject blockTarget = api.CallObjectMethod(stateTarget, m_getBlock);
-//
-//                bool belowIsObsidian = env->IsSameObject(blockBelow, OBSIDIAN);
-//                bool targetIsValid = env->IsSameObject(blockTarget, OBSIDIAN) || env->IsSameObject(blockTarget, BEDROCK);
-//
-//                if (belowIsObsidian && targetIsValid && gameMode) {
-//                    jobject result = api.CallObjectMethod(
-//                        gameMode, m_interactBlock, player, MAIN_HAND, hitResult);
-//                    if (result) {
-//                        bool accepted = env->CallBooleanMethod(result, m_isAccepted);
-//                        if (accepted) // ← shouldSwing weg, nur noch accepted prüfen
-//                            if (!env->ExceptionCheck())
-                        p_mc->Swing(env,player);
-//                       env->DeleteLocalRef(result);
-//                    }
-//                }
-//
-//                env->DeleteLocalRef(blockTarget);
-//                env->DeleteLocalRef(blockBelow);
-//                env->DeleteLocalRef(stateTarget);
-//                env->DeleteLocalRef(stateBelow);
-//                env->DeleteLocalRef(blockPosDown);
-//                env->DeleteLocalRef(blockPos);
-//            }
-
             // ── Cleanup ──
             if (gameMode)
                 env->DeleteLocalRef(gameMode);

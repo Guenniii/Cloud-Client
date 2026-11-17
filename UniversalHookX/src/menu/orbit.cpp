@@ -962,9 +962,15 @@ void Draw() {
                                    ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
             const bool grid_hov = ImGui::IsItemHovered();
             auto centre = [&](int k) { return ImVec2(org.x + Sc(tpos[k].x - CH_X), org.y + Sc(tpos[k].y - CH_Y)); };
+            // tiles that stick out of the child (3rd row, scrolling) fade out instead of overlapping the tab/inspector
+            auto edge_vis = [&](const ImVec2& c) {
+                const float out = (std::max)(cmin.y - (c.y - Sc(TILE_H) * 0.5f), (c.y + Sc(TILE_H) * 0.5f) - cmax.y);
+                return (std::max)(0.3f, ImSaturate(1.0f - out / Sc(20.0f))); // faint peek hints that the grid scrolls
+            };
             if (grid_hov) { // point-in-hexagon (pointy top); bounding boxes overlap, so a single button covers the grid
                 for (int k = 0; k < count && hov_tile < 0; ++k) {
                     const ImVec2 c = centre(k);
+                    if (edge_vis(c) < 0.5f) continue; // faded tiles are not clickable
                     const float dx = std::fabs(io.MousePos.x - c.x) / g_s, dy = std::fabs(io.MousePos.y - c.y) / g_s;
                     if (dx <= TILE_W * 0.5f && dy <= TILE_H * 0.5f - dx * (TILE_H * 0.25f / (TILE_W * 0.5f))) hov_tile = k;
                 }
@@ -991,7 +997,7 @@ void Draw() {
                     const ImVec2 c = centre(k);
                     // staggered appearance (18 ms per tile) and a short press flash after a click
                     const float appear = ImSaturate(static_cast<float>(now - grid_t0) / 0.18f - k * 0.1f); // 0.18 s per tile, start offset 18 ms * k
-                    const float ap = 1.0f - (1.0f - appear) * (1.0f - appear);
+                    const float ap = (1.0f - (1.0f - appear) * (1.0f - appear)) * edge_vis(c);
                     const float press = mi == press_mod ? 1.0f - ImSaturate(static_cast<float>(now - press_t0) / 0.3f) : 0.0f;
                     const float tw = Sc(TILE_W) * (0.85f + 0.15f * ap) * (1.0f + 0.06f * press), th = Sc(TILE_H) * (0.85f + 0.15f * ap) * (1.0f + 0.06f * press);
                     if (!ImGui::IsRectVisible(ImVec2(c.x - tw * 0.5f - Sc(12), c.y - th * 0.5f - Sc(12)), ImVec2(c.x + tw * 0.5f + Sc(12), c.y + th * 0.5f + Sc(12))) && !is_sel)
@@ -1099,7 +1105,7 @@ void Draw() {
                 ImGui::PushID("orbit_insp");
 
                 // right-aligned controls, built from the right edge: reset, star, TOG/HOLD, keycap
-                const bool mode_used = m.enabled != &ShortWindCharge_Enabled && m.enabled != &AutoPearlCatch_Enabled; // press-action modules ignore the mode
+                const bool mode_used = !m.action_request; // press-action modules ignore the mode
                 float rx = imax.x - Sc(18);
                 const float cd = Sc(30);
                 auto round_button = [&](const char* id, float right, const char* icon, bool active, const char* tip_text) {

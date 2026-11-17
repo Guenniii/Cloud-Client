@@ -96,6 +96,8 @@ inline const char* ModuleIcon(const ModuleData& module) {
         {"Auto Mace", ICON_FA_HAMMER},
         {"Auto Pearl Catch", ICON_FA_FEATHER_ALT},
         {"Short Wind Charge", ICON_FA_WIND},
+        {"Key Pearl", ICON_FA_FEATHER_ALT},
+        {"Totem Warner", ICON_FA_EYE},
         {"Safe Walk", ICON_FA_SHOE_PRINTS},
         {"AntiBot", ICON_FA_ROBOT},
         {"SilentAim", ICON_FA_CROSSHAIRS},

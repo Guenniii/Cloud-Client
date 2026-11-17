@@ -24,6 +24,7 @@ namespace Menu::Resources {
     ImTextureID LogoTexture();
     ImTextureID UserTexture();
     bool HasUserAvatar(); // downloaded avatar uploaded; UserTexture() otherwise returns the default logo
+    bool UserAvatarPending(); // download still running or downloaded but not yet uploaded by UserTexture()
     void RequestUserAvatar(const std::string& username);
     void UpdateAnimation(float deltaTime);
     void ReleaseTextures(bool vulkanTextures);

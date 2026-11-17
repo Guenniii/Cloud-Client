@@ -94,6 +94,7 @@ namespace Config {
         file << "theme=" << std::clamp(Theme::selected,0,Theme::Count-1) << "\n";
         file << "menu_keybind=" << menu_keybind << "\n";
         file << "particles=" << (particles_enabled ? 1 : 0) << "\n";
+        file << "ui.hotkey_toasts=" << (hotkey_toasts ? 1 : 0) << "\n";
         file << "ui.menu_style=" << menu_style << "\n";
 
         for (int i = 0; i < module_count; i++) {
@@ -151,6 +152,7 @@ namespace Config {
             modules[i].hotkey_mode = Input::HotkeyMode::Toggle;
             modules[i].favorite = false;
         }
+        hotkey_toasts=true;
         hud_enabled=false;watermark_enabled=true;watermark_x=-1;watermark_y=20;
         Theme::gradient_enabled=false;Theme::animated_accent=false;Theme::player_colors_enabled=false;
         Theme::secondary_rgb=0xF459D5;Theme::gradient_strength=18;Theme::animation_period=8;
@@ -269,6 +271,10 @@ namespace Config {
             if (key == "ui.menu_style") {
                 int style = 1;
                 menu_style = (ParseNumber(val, style) && style >= 0 && style <= 2) ? style : 2; // unknown values -> Orbit
+                continue;
+            }
+            if (key == "ui.hotkey_toasts") {
+                if (val == "0" || val == "1") hotkey_toasts = (val == "1");
                 continue;
             }
             if (key == "particles") {

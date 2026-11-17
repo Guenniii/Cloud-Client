@@ -43,8 +43,8 @@ inline std::string Report() {
         {"CW",&CW_Enabled},{"Reach",&Reach_Enabled},{"FastPlace",&FastPlace_Enabled},
         {"AutoSprint",&AutoSprint_Enabled},{"NoJumpDelay",&NoJumpDelay_Enabled},
         {"AutoTotem",&AutoTotem_Enabled},{"HitCrystal",&HitCrystal_Enabled},
-        {"Auto Pearl Catch",&AutoPearlCatch_Enabled},{"Short Wind Charge",&ShortWindCharge_Enabled},{"Safe Walk",&SafeWalk_Enabled},{"Auto Mace",&AutoMace_Enabled},{"Fake Lag", &FakeLag_Enabled}, {"Auto Tool",&AutoTool_Enabled},{"Breach Swap",&BreachSwap_Enabled},{"Safe Anchor",&SafeAnchor_Enabled},{"Aim Assist", &AimAssist_Enabled}, {"SilentAim",&Silent_Aim_Enabled},{"SeedCracker",&SeedCracker_Enabled},
-        {"OreSim",&OreSim_Enabled},{"Player ESP",&PlayerESP_Enabled}
+        {"Auto Pearl Catch",&AutoPearlCatch_Enabled},{"Short Wind Charge",&ShortWindCharge_Enabled},{"Key Pearl",&KeyPearl_Enabled},{"Safe Walk",&SafeWalk_Enabled},{"Auto Mace",&AutoMace_Enabled},{"Fake Lag", &FakeLag_Enabled}, {"Auto Tool",&AutoTool_Enabled},{"Breach Swap",&BreachSwap_Enabled},{"Safe Anchor",&SafeAnchor_Enabled},{"Aim Assist", &AimAssist_Enabled}, {"SilentAim",&Silent_Aim_Enabled},{"SeedCracker",&SeedCracker_Enabled},
+        {"OreSim",&OreSim_Enabled},{"Player ESP",&PlayerESP_Enabled},{"Totem Warner",&TotemWarner_Enabled}
     };
     for(const auto& entry:entries) out << entry.name << '=' << entry.value->load() << '\n';
     out << "\nModule settings and hotkeys (Windows VK; 0=unbound):\n";

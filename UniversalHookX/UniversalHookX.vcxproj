@@ -184,6 +184,7 @@
     <ClCompile Include="src\modules\movement\safe_walk_module.cpp" />
     <ClCompile Include="src\modules\movement\short_wind_charge_module.cpp" />
     <ClCompile Include="src\modules\movement\auto_pearl_catch_module.cpp" />
+    <ClCompile Include="src\modules\movement\key_pearl_module.cpp" />
     <ClCompile Include="src\modules\combat\hit_crystal_module.cpp" />
     <ClCompile Include="src\modules\combat\auto_mace_module.cpp" />
     <ClCompile Include="src\modules\combat\breach_swap_module.cpp" />

@@ -7,10 +7,11 @@
 #include "../utils/sdk/java.hpp"
 #include "../input/game_screen.hpp"
 #include "../input/action_key.hpp"
+#include "hotkey_toasts.hpp"
 
 namespace Menu::Registry {
 namespace {
-constexpr int MODULE_COUNT = 35;
+constexpr int MODULE_COUNT = 37;
 
 // Bind card hotkeys to the primary runtime feature, not unused UI flags.
 
@@ -183,12 +184,15 @@ static ModuleData modules[MODULE_COUNT] = {
     {"Auto Pearl Catch", 0, 0, &AutoPearlCatch_Enabled, 1, {
         {"Verzoegerung", SettingType::SliderInt, nullptr, &AutoPearlCatch_Delay, 50, 500, " ms"},
         {"Hotbar spoofing (aus: normal)", SettingType::Checkbox, &AutoPearlCatch_SpoofHotbar},
-    }},
+    }, Input::HotkeyMode::Toggle, false, &AutoPearlCatch_Request},
     {"Short Wind Charge", 0, 0, &ShortWindCharge_Enabled, 1, {
         {"Vor dem Wurf springen", SettingType::Checkbox, &ShortWindCharge_Jump},
         {"Wurfverzoegerung", SettingType::SliderInt, nullptr, &ShortWindCharge_ThrowDelay, 0, 300, " ms"},
         {"Hotbar spoofing (aus: normal)", SettingType::Checkbox, &ShortWindCharge_SpoofHotbar},
-    }},
+    }, Input::HotkeyMode::Toggle, false, &ShortWindCharge_Request},
+    {"Key Pearl", 0, 0, &KeyPearl_Enabled, 1, {
+        {"Hotbar spoofing (aus: normal)", SettingType::Checkbox, &KeyPearl_SpoofHotbar},
+    }, Input::HotkeyMode::Toggle, false, &KeyPearl_Request},
     {"Safe Walk", 0, 0, &SafeWalk_Enabled, 1, {
         {"Nur mit Block in der Hand", SettingType::Checkbox, &SafeWalk_OnlyBlocks},
     }},
@@ -256,6 +260,9 @@ static ModuleData modules[MODULE_COUNT] = {
         {"Reichweite", SettingType::SliderInt, nullptr, &PlayerESP_Range, 16, 256, " m"},
         {"Linienstaerke", SettingType::SliderInt, nullptr, &PlayerESP_LineWidth, 1, 4, " px"},
     }},
+    {"Totem Warner", 0, 0, &TotemWarner_Enabled, 3, {
+        {"Reichweite", SettingType::SliderInt, nullptr, &TotemWarner_Range, 8, 128, " m"},
+    }},
 };
 
 // Capture factory settings once, before profiles or runtime actions can change them.
@@ -315,6 +322,8 @@ const char* Description(const char* name) {
         {"Auto Mace", "Coordinates mace attacks while falling towards an eligible target."},
         {"Auto Pearl Catch", "Coordinates the pearl and wind-charge action on its hotkey."},
         {"Short Wind Charge", "Uses a wind charge for the configured jump action."},
+        {"Key Pearl", "Throws an ender pearl along your view on its hotkey, without a visible slot change when spoofing is on."},
+        {"Totem Warner", "Labels nearby enemy players who hold no totem in either hand."},
         {"Safe Walk", "Helps prevent walking off block edges."},
         {"AntiBot", "Filters suspected bots using the enabled player checks."},
         {"SilentAim", "Adjusts attack targeting towards eligible players."},
@@ -364,9 +373,9 @@ void ProcessHotkeys(bool blocked) {
     for (int i=0; i<MODULE_COUNT; ++i) {
         auto& module=modules[i];
         bool down=module.hotkey>0 && (GetAsyncKeyState(module.hotkey)&0x8000)!=0;
-        if (module.enabled==&ShortWindCharge_Enabled || module.enabled==&AutoPearlCatch_Enabled) {
+        if (module.action_request) {
             auto& actionKey=actionKeys[i];
-            auto& request=module.enabled==&ShortWindCharge_Enabled ? ShortWindCharge_Request : AutoPearlCatch_Request;
+            auto& request=*module.action_request;
             const bool unavailable=blocked || !module.enabled->load() || HasConflict(module.hotkey,i);
             if (unavailable) request=false;
             if (actionKey.Press(module.hotkey,down,unavailable)) request=true;
@@ -375,7 +384,10 @@ void ProcessHotkeys(bool blocked) {
         bool before=module.enabled->load();
         bool after=states[i].Update(module.hotkey,module.hotkey_mode,down,
             blocked || module.hotkey==VK_END || module.hotkey==VK_ESCAPE || module.hotkey==Config::menu_keybind,before);
-        if (after!=before) module.enabled->store(after);
+        if (after!=before) {
+            module.enabled->store(after);
+            if (module.hotkey_mode==Input::HotkeyMode::Toggle) HotkeyToasts::Push(module.name,after); // Hold would toast on every press/release
+        }
     }
 }
 

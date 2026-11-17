@@ -36,6 +36,7 @@ struct ModuleData {
     std::vector<ModuleSetting> settings_list;
     Input::HotkeyMode hotkey_mode = Input::HotkeyMode::Toggle;
     bool favorite = false;
+    std::atomic<bool>* action_request = nullptr; // press-action module: hotkey sets this flag instead of toggling
 };
 
 namespace Config {
@@ -59,6 +60,7 @@ namespace Config {
     // ---- Globale App-Settings (Settings-Tab) ----
     extern std::atomic<int> menu_keybind;        // Taste zum Oeffnen/Schliessen des Menues
     extern bool particles_enabled;  // Partikel-Hintergrund an/aus
+    inline bool hotkey_toasts = true; // Hotkey-Toasts ("<Modul> on/off"); nur Render-Thread
     inline int menu_style = 2;      // 0 = klassisches Menue, 1 = Click GUI, 2 = Orbit (Standard); nur Render-Thread
     extern std::atomic<bool> capturing_menu_key; // true waehrend auf einen neuen Menue-Hotkey gewartet wird
 

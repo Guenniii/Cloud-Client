@@ -62,6 +62,13 @@ void DrawSettingsPage(ImDrawList* draw_list, ImVec2 area_min, float area_w, floa
     ImGui::SetCursorScreenPos(ImVec2(area_min.x + 20 + row_w - tw, row_y + 2.0f));
     CustomToggle("##settings_particles", &Config::particles_enabled, alpha, tw, th);
 
+    // --- Hotkey toasts ---
+    row_y += 64.0f;
+    draw_list->AddText(ImVec2(area_min.x + 20, row_y + 3), ColA(Menu::Palette::Label(), alpha), "Hotkey toasts");
+    draw_list->AddText(ImVec2(area_min.x + 20, row_y + 20), ColA(Menu::Palette::Muted(), alpha), "Show \"<module> on/off\" when a hotkey toggles a module.");
+    ImGui::SetCursorScreenPos(ImVec2(area_min.x + 20 + row_w - tw, row_y + 2.0f));
+    CustomToggle("##settings_hotkey_toasts", &Config::hotkey_toasts, alpha, tw, th);
+
     // --- Menu style (this page is shared by all three menus; the change takes effect next frame) ---
     row_y += 64.0f;
     draw_list->AddText(ImVec2(area_min.x + 20, row_y + 3), ColA(Menu::Palette::Label(), alpha), "Menu style");

@@ -134,3 +134,14 @@ Spezifikation: `../docs/login-orbit-design.md`. Umschalten über `constexpr int 
 
 - [ ] Ansicht und Ablauf unverändert (Intro, Anmeldung, Erfolg-Exit); Absenden ist nur im Success-Exit zusätzlich gesperrt.
 - [ ] Fehlertexte wie bisher („Invalid credentials“, „Your license has expired“, …).
+
+## Auto Crystal, Hotkey-Toasts, Key Pearl, Totem Warner
+
+- [ ] Auto Crystal: Rechtsklick halten mit Kristall in der Haupthand schlaegt nur Kristalle an (kein Dauer-Swing beim Essen, Blocken, Bauen; kein Kristall in der Haupthand = keine Aktion).
+- [ ] Auto Crystal: Rechtsklick bei offenem Menue, offenem Chat/Inventar oder in einem anderen Fenster loest keinen Angriff aus.
+- [ ] Auto Crystal: mit `CW Delay` 0 wird derselbe Kristall hoechstens alle 50 ms angegriffen (Console/Netzwerk beobachten).
+- [ ] Hotkey-Toasts: Modul per Hotkey (Toggle) umschalten zeigt "<Modul> on/off" unten rechts (neuester unten), ca. 1,5 s mit Ein-/Ausblenden; drei schnelle Wechsel zeigen drei gestapelte Toasts, ein vierter ersetzt den aeltesten. Hold-Modus zeigt keine Toasts.
+- [ ] Hotkey-Toasts: Settings "Hotkey toasts" aus = keine Toasts; Wert bleibt im Profil (`ui.hotkey_toasts`) und beim Undo/Redo; Aktionsmodule (Short Wind Charge, Auto Pearl Catch, Key Pearl) zeigen keinen Toast.
+- [ ] Aktionstasten: Short Wind Charge, Auto Pearl Catch und Key Pearl loesen auf Tastendruck aus, TOG/HOLD ist in Klassisch, Click GUI und Orbit bei allen dreien ausgeblendet.
+- [ ] Key Pearl (Bridge-JAR neu, Minecraft neu starten): Hotkey wirft eine Perle in Blickrichtung (Pitch unveraendert); mit Hotbar spoofing ohne sichtbaren Slotwechsel; ohne Perle Console-Hinweis; bei offenem Menue/Screen nichts; waehrend einer Auto-Pearl-Catch-Sequenz "still pending".
+- [ ] Totem Warner (OpenGL und Vulkan): "NO TOTEM" ueber Gegnern ohne Totem in Haupt-/Nebenhand; weg, sobald ein Totem gehalten wird; keine Labels fuer sich selbst, Freunde und AntiBot-gefilterte Spieler; Reichweiten-Slider wirkt; andere Visual-Module unveraendert (Laengenpruefung 31).

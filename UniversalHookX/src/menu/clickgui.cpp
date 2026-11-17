@@ -343,7 +343,7 @@ void DrawCard(ImDrawList* dl, std::span<ModuleData> modules, int i, const MV::Fi
 
             // action row: hotkey mode segment (left), reset (right)
             const float ah = Sc(24);
-            const bool mode_used = m.enabled != &ShortWindCharge_Enabled && m.enabled != &AutoPearlCatch_Enabled; // those use press actions, mode ignored
+            const bool mode_used = !m.action_request; // those use press actions, mode ignored
             if (mode_used) {
                 const float w1 = TextSize(11, "Toggle").x + Sc(20), w2 = TextSize(11, "Hold").x + Sc(20);
                 dl->AddRectFilled(ImVec2(x0, y), ImVec2(x0 + w1 + w2 + Sc(4), y + ah), A(P::Background()), Sc(8));

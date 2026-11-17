@@ -139,6 +139,7 @@ namespace Menu::Resources {
         return profileAvatar.TextureID()?profileAvatar.TextureID():userlogo.TextureID();
     }
     bool HasUserAvatar() { return profileAvatar.TextureID() ? true : false; }
+    bool UserAvatarPending() { return pendingAvatar.valid() || (!profileUploadAttempted && !profileImage.empty()); }
     void UpdateAnimation(float deltaTime) { UpdateGif(gif, deltaTime); }
     void ReleaseTextures(bool /*vulkanTextures*/) {
         DestroyTexture(&logo);

@@ -20,6 +20,7 @@ void ModuleManager::Init() {
     m_modules.push_back(RuntimeModules::CreateSafeWalk());
     m_modules.push_back(RuntimeModules::CreateShortWindCharge());
     m_modules.push_back(RuntimeModules::CreateAutoPearlCatch());
+    m_modules.push_back(RuntimeModules::CreateKeyPearl());
     m_modules.push_back(RuntimeModules::CreateHitCrystal());
     m_modules.push_back(RuntimeModules::CreateAutoMace());
     m_modules.push_back(RuntimeModules::CreateBreachSwap());

@@ -65,6 +65,13 @@ inline std::atomic<bool> ShortWindCharge_Jump = false;
 inline std::atomic<int> ShortWindCharge_ThrowDelay = 0;
 inline std::atomic<bool> ShortWindCharge_Request = false;
 
+inline std::atomic<bool> KeyPearl_Enabled = false;
+inline std::atomic<bool> KeyPearl_SpoofHotbar = false;
+inline std::atomic<bool> KeyPearl_Request = false;
+
+inline std::atomic<bool> TotemWarner_Enabled = false;
+inline std::atomic<int> TotemWarner_Range = 64;
+
 inline std::atomic<bool> SafeWalk_Enabled = false;
 inline std::atomic<bool> SafeWalk_OnlyBlocks = false;
 

@@ -17,6 +17,7 @@ namespace RuntimeModules {
     std::unique_ptr<ModuleBase> CreateSafeWalk();
     std::unique_ptr<ModuleBase> CreateShortWindCharge();
     std::unique_ptr<ModuleBase> CreateAutoPearlCatch();
+    std::unique_ptr<ModuleBase> CreateKeyPearl();
     std::unique_ptr<ModuleBase> CreateHitCrystal();
     std::unique_ptr<ModuleBase> CreateAimAssist();
     std::unique_ptr<ModuleBase> CreateSilentAim();

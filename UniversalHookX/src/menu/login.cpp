@@ -37,6 +37,10 @@ namespace Menu::Login {
         static bool login_success_pending = false;
         static float login_success_timer = 0.0f;
         static constexpr float LOGIN_SUCCESS_HOLD = 0.7f; // grüne Meldung kurz halten
+        // The avatar download starts at login success: hold the success state until it arrives (capped)
+        // and keep it visible for a moment, so the profile picture replaces the initial before the exit.
+        static constexpr float AVATAR_WAIT_MAX = 1.5f, AVATAR_SHOW_MIN = 0.6f;
+        static float avatar_wait = 0.0f, avatar_shown = 0.0f;
 
         // Exit-Animation nach Success (Karte raus → Logo Pulse → Fade)
         static bool success_exit = false;
@@ -69,6 +73,7 @@ namespace Menu::Login {
                     Resources::RequestUserAvatar(last_logged_user);
                     login_success_pending = true;
                     login_success_timer = 0.0f;
+                    avatar_wait = avatar_shown = 0.0f;
                 } else {
                     responseText = result.license.errorMessage;
                     login_success_pending = false;
@@ -381,7 +386,13 @@ namespace Menu::Login {
 
         // 1) Success-Meldung kurz halten, dann Exit-Animation starten
         if (login_success_pending && !success_exit && !logged_in) {
-            login_success_timer += ImGui::GetIO( ).DeltaTime;
+            const float dt = ImGui::GetIO( ).DeltaTime;
+            Resources::UserTexture( ); // polls the download and uploads the avatar on this (render) thread
+            const bool has_avatar = Resources::HasUserAvatar( ), pending = Resources::UserAvatarPending( );
+            if (has_avatar) avatar_shown += dt; else if (pending) avatar_wait += dt;
+            const bool hold_for_avatar = (pending && avatar_wait < AVATAR_WAIT_MAX) || (has_avatar && avatar_shown < AVATAR_SHOW_MIN);
+            // the timeline (also the Orbit morph) is frozen just before the exit while waiting
+            if (!hold_for_avatar || login_success_timer + dt < LOGIN_SUCCESS_HOLD) login_success_timer += dt;
             if (login_success_timer >= LOGIN_SUCCESS_HOLD) {
                 login_success_pending = false;
                 success_exit = true;

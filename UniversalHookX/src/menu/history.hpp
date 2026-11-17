@@ -10,7 +10,7 @@
 namespace Menu::History {
 struct Snapshot {
     std::vector<int> modules;
-    std::array<int,26> ui;
+    std::array<int,27> ui;
     long long seed;
     bool hasSeed;
     bool seedFromCracker;
@@ -30,7 +30,7 @@ inline Snapshot Capture() {
         Config::font_size_percent.load(),Config::menu_keybind.load(),Config::particles_enabled,
         Config::hud_enabled,Config::hud_x,Config::hud_y,Theme::custom_background_enabled.load(),Theme::custom_background_rgb.load(),
         Theme::gradient_enabled.load(),Theme::secondary_rgb.load(),Theme::gradient_strength.load(),Theme::animated_accent.load(),
-        Theme::animation_period.load(),Theme::player_colors_enabled.load(),Theme::friend_rgb.load(),Theme::enemy_rgb.load(),Config::watermark_enabled,Config::watermark_x,Config::watermark_y,Config::menu_style};
+        Theme::animation_period.load(),Theme::player_colors_enabled.load(),Theme::friend_rgb.load(),Theme::enemy_rgb.load(),Config::watermark_enabled,Config::watermark_x,Config::watermark_y,Config::menu_style,Config::hotkey_toasts};
     state.seed=OreSim::manualSeed;state.hasSeed=OreSim::hasManualSeed;
     state.seedFromCracker=OreSim::seedFromCracker;
     state.seedInput=OreSim::seedInput;state.seedError=OreSim::seedError;state.activeProfile=Config::active_profile;
@@ -56,6 +56,7 @@ inline void Restore(const Snapshot& state) {
     Theme::friend_rgb=state.ui[20];Theme::enemy_rgb=state.ui[21];
     Config::watermark_enabled=state.ui[22]!=0;Config::watermark_x=state.ui[23];Config::watermark_y=state.ui[24];
     Config::menu_style=state.ui[25]>=0&&state.ui[25]<=2?state.ui[25]:2;
+    Config::hotkey_toasts=state.ui[26]!=0;
     OreSim::manualSeed=state.seed;OreSim::hasManualSeed=state.hasSeed;OreSim::seedError=state.seedError;
     OreSim::seedFromCracker=state.seedFromCracker;
     std::snprintf(OreSim::seedInput,sizeof(OreSim::seedInput),"%s",state.seedInput.c_str());

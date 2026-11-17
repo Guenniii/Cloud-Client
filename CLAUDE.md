@@ -48,6 +48,7 @@ python .\tools\test_client_build.py               # Tests des Build-Skripts
 | `input/rotation/antibot.hpp` / `input/rotation/manual_attack.hpp` | `player.AntiBotBridge` / `aim.ManualAttackBridge` |
 | `input/combat/{safe_anchor,breach_swap,auto_mace,aim_assist}.hpp` | `combat.{SafeAnchor,BreachSwap,AutoMace,AimAssist}Bridge` |
 | `modules/movement/{short_wind_charge,safe_walk,auto_pearl_catch}_module.cpp` | `movement.{ShortWindCharge,SafeWalk,AutoPearlCatch}Bridge` |
+| `modules/movement/key_pearl_module.cpp` | `movement.AutoPearlCatchBridge.pearl(boolean)` |
 | `menu/target_hud.hpp` | `hud.TargetHudBridge` |
 Bridge-Klassen über `SeedCracker::LoadExtensionClass(env, "phantomui.…")` laden, nicht über `env->FindClass`
 (der `BridgeClassLoader` definiert `phantomui.*`, `com.seedfinding.*` und `kaptainwutax.seedcrackerX.*` selbst).
@@ -59,7 +60,7 @@ Bridge-Klassen über `SeedCracker::LoadExtensionClass(env, "phantomui.…")` lad
   Globale Refs beim Entladen freigeben (Unload-Reihenfolge Worker → Menü → SDK beachten).
 - **Optionslayouts** müssen auf beiden Seiten gleich bleiben: `input/assist_options.hpp` ↔ `phantomui/assist/AssistOptions.java`
   (COUNT 30, Indizes 0..COUNT-1, nur anhängen; jede Option genau einmal in `input/utility_suite.hpp` gesetzt – prüft `check_protocol`).
-  `VisualModulesBridge.frame(int[])` erwartet genau 29 Werte (wird nicht automatisch geprüft).
+  `VisualModulesBridge.frame(int[])` erwartet genau 31 Werte (wird nicht automatisch geprüft).
 - **Profile**: `PhantomUI/configs/<name>.cfg` (relativ zum Arbeitsverzeichnis), Text `key=value`, erste Zeile `profile_version=2`,
   pro Modul `module.<name>.enabled|favorite|hotkey|hotkey_mode|<setting>=<int>`. Namen über `ValidName` (1–64 Zeichen).
   Menüwahl `ui.menu_style=0|1|2` (Klassisch / Click GUI / Orbit, Standard 2, kein Autoload; `menu.cpp` `kMenus[]`).
